@@ -108,7 +108,7 @@ jobs:
             --sort DESC \
             --max-items 1 \
             --query 'taskDefinitionArns[0]' \
-            --output text)
+            --output text 2>/dev/null)
 
           if [ -z "$TASK_DEF_ARN" ] || [ "$TASK_DEF_ARN" = "None" ]; then
             echo "⚠️  No existing task definition found. Skipping update."
@@ -116,19 +116,39 @@ jobs:
             exit 0
           fi
 
+          echo "Current task definition: $TASK_DEF_ARN"
+
           # Get task definition JSON
           TASK_DEF_JSON=$(aws ecs describe-task-definition \
             --task-definition ${TASK_DEF_ARN} \
             --query 'taskDefinition' \
-            --output json)
+            --output json 2>/dev/null)
+
+          if [ -z "$TASK_DEF_JSON" ] || [ "$TASK_DEF_JSON" = "null" ]; then
+            echo "❌ ERROR: Failed to retrieve task definition details"
+            exit 1
+          fi
 
           # Register new revision (forces ECS to pull new image)
-          NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq -c 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
 
-          aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" > /dev/null
+          if [ -z "$NEW_TASK_DEF" ] || [ "$NEW_TASK_DEF" = "null" ]; then
+            echo "❌ ERROR: Failed to process task definition JSON"
+            exit 1
+          fi
 
-          echo "✅ New task definition revision registered"
+          # Register new revision
+          RESULT=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text 2>/dev/null)
+
+          if [ -z "$RESULT" ] || [ "$RESULT" = "None" ]; then
+            echo "❌ ERROR: Failed to register new task definition revision"
+            exit 1
+          fi
+
+          echo "✅ New task definition revision registered: $RESULT"
 
       - name: Build Summary
         run: |
