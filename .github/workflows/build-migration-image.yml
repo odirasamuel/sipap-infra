@@ -100,15 +100,17 @@ jobs:
 
       - name: Force Update ECS Task Definition
         run: |
+          set -e  # Exit on any error
+
           echo "Forcing new ECS task definition revision..."
 
-          # Get current task definition
+          # Get current task definition (suppress all None output)
           TASK_DEF_ARN=$(aws ecs list-task-definitions \
             --family-prefix sipap-dev-migrations \
             --sort DESC \
             --max-items 1 \
             --query 'taskDefinitionArns[0]' \
-            --output text 2>/dev/null)
+            --output text 2>&1 | grep -v "^None$" | head -1)
 
           if [ -z "$TASK_DEF_ARN" ] || [ "$TASK_DEF_ARN" = "None" ]; then
             echo "⚠️  No existing task definition found. Skipping update."
@@ -118,30 +120,39 @@ jobs:
 
           echo "Current task definition: $TASK_DEF_ARN"
 
-          # Get task definition JSON
-          TASK_DEF_JSON=$(aws ecs describe-task-definition \
-            --task-definition ${TASK_DEF_ARN} \
+          # Get task definition JSON (write to temp file to avoid None output)
+          TEMP_FILE=$(mktemp)
+          aws ecs describe-task-definition \
+            --task-definition "${TASK_DEF_ARN}" \
             --query 'taskDefinition' \
-            --output json 2>/dev/null)
+            --output json > "$TEMP_FILE" 2>&1
 
-          if [ -z "$TASK_DEF_JSON" ] || [ "$TASK_DEF_JSON" = "null" ]; then
+          # Validate JSON was retrieved
+          if [ ! -s "$TEMP_FILE" ]; then
             echo "❌ ERROR: Failed to retrieve task definition details"
+            rm -f "$TEMP_FILE"
             exit 1
           fi
 
-          # Register new revision (forces ECS to pull new image)
-          NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq -c 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          # Remove task definition metadata fields
+          jq -c 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' "$TEMP_FILE" > "${TEMP_FILE}.new"
 
-          if [ -z "$NEW_TASK_DEF" ] || [ "$NEW_TASK_DEF" = "null" ]; then
+          # Validate processed JSON
+          if [ ! -s "${TEMP_FILE}.new" ]; then
             echo "❌ ERROR: Failed to process task definition JSON"
+            rm -f "$TEMP_FILE" "${TEMP_FILE}.new"
             exit 1
           fi
 
           # Register new revision
+          echo "Registering new task definition revision..."
           RESULT=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
+            --cli-input-json "file://${TEMP_FILE}.new" \
             --query 'taskDefinition.taskDefinitionArn' \
-            --output text 2>/dev/null)
+            --output text 2>&1 | grep -v "^None$" | head -1)
+
+          # Cleanup temp files
+          rm -f "$TEMP_FILE" "${TEMP_FILE}.new"
 
           if [ -z "$RESULT" ] || [ "$RESULT" = "None" ]; then
             echo "❌ ERROR: Failed to register new task definition revision"
