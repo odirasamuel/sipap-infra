@@ -17,7 +17,8 @@ RUN apk add --no-cache \
     python3-dev
 
 # Install Python packages for Alembic
-RUN pip3 install --no-cache-dir \
+# Note: --break-system-packages is safe in Docker containers (PEP 668)
+RUN pip3 install --no-cache-dir --break-system-packages \
     alembic==1.13.1 \
     psycopg2-binary==2.9.9 \
     SQLAlchemy==2.0.25
