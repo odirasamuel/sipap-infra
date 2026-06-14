@@ -36,7 +36,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.SIPAP_DEV_AWS_ROLE_ARN }}
           role-session-name: sipap-migrations-build
           aws-region: ${{ env.AWS_REGION }}
 
@@ -143,24 +143,204 @@ jobs:
           echo "| **Platform** | \`linux/amd64\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| **Triggered By** | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| **Status** | ✅ Success |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status** | ✅ Build Success |" >> "$GITHUB_STEP_SUMMARY"
+
+  run-migration:
+    name: Run Database Migration
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SIPAP_DEV_AWS_ROLE_ARN }}
+          role-session-name: sipap-migrations-run
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get VPC Configuration
+        id: vpc-config
+        run: |
+          echo "Getting VPC configuration from AWS..."
+
+          # Get VPC ID
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=sipap-dev-vpc" \
+            --query 'Vpcs[0].VpcId' \
+            --output text)
+
+          echo "VPC ID: $VPC_ID"
+
+          # Get private subnets
+          PRIVATE_SUBNETS=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*private*" \
+            --query 'Subnets[*].SubnetId' \
+            --output text | tr '\t' ',')
+
+          echo "Private Subnets: $PRIVATE_SUBNETS"
+
+          # Get ECS tasks security group
+          DB_SG=$(aws ec2 describe-security-groups \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=sipap-dev-ecs-tasks-sg" \
+            --query 'SecurityGroups[0].GroupId' \
+            --output text)
+
+          echo "Security Group: $DB_SG"
+
+          # Get task definition ARN
+          TASK_DEF=$(aws ecs list-task-definitions \
+            --family-prefix sipap-dev-migrations \
+            --sort DESC \
+            --max-items 1 \
+            --query 'taskDefinitionArns[0]' \
+            --output text)
+
+          echo "Task Definition: $TASK_DEF"
+
+          # Export to outputs
+          echo "vpc_id=$VPC_ID" >> "$GITHUB_OUTPUT"
+          echo "private_subnets=$PRIVATE_SUBNETS" >> "$GITHUB_OUTPUT"
+          echo "security_group=$DB_SG" >> "$GITHUB_OUTPUT"
+          echo "task_definition=$TASK_DEF" >> "$GITHUB_OUTPUT"
+
+      - name: Run Migration Task
+        id: run-task
+        run: |
+          echo "=============================================="
+          echo "Running Database Migration ECS Task"
+          echo "=============================================="
+          echo "Cluster: sipap-dev-cluster"
+          echo "Task Definition: ${{ steps.vpc-config.outputs.task_definition }}"
+          echo "Subnets: ${{ steps.vpc-config.outputs.private_subnets }}"
+          echo "Security Group: ${{ steps.vpc-config.outputs.security_group }}"
+          echo "=============================================="
+
+          # Run ECS task
+          TASK_ARN=$(aws ecs run-task \
+            --cluster sipap-dev-cluster \
+            --task-definition ${{ steps.vpc-config.outputs.task_definition }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.vpc-config.outputs.private_subnets }}],securityGroups=[${{ steps.vpc-config.outputs.security_group }}],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+            echo "❌ ERROR: Failed to start ECS task"
+            exit 1
+          fi
+
+          echo "✅ Migration task started: $TASK_ARN"
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+
+          # Extract task ID for log filtering
+          TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
+          echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Migration Completion
+        id: wait-task
+        run: |
+          echo "Waiting for migration task to complete..."
+          TASK_ARN="${{ steps.run-task.outputs.task_arn }}"
+
+          # Wait for task to complete (timeout: 10 minutes)
+          for i in {1..60}; do
+            TASK_STATUS=$(aws ecs describe-tasks \
+              --cluster sipap-dev-cluster \
+              --tasks $TASK_ARN \
+              --query 'tasks[0].lastStatus' \
+              --output text)
+
+            echo "[$i/60] Task status: $TASK_STATUS"
+
+            if [ "$TASK_STATUS" = "STOPPED" ]; then
+              echo "✅ Task completed"
+              break
+            fi
+
+            if [ $i -eq 60 ]; then
+              echo "❌ ERROR: Task did not complete within 10 minutes"
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          # Get exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster sipap-dev-cluster \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          # Get stopped reason (if any)
+          STOPPED_REASON=$(aws ecs describe-tasks \
+            --cluster sipap-dev-cluster \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].stoppedReason' \
+            --output text)
+
+          echo "stopped_reason=$STOPPED_REASON" >> "$GITHUB_OUTPUT"
+
+      - name: Get Migration Logs
+        if: always()
+        run: |
+          echo "Fetching migration logs from CloudWatch..."
+
+          # Wait a few seconds for logs to be available
+          sleep 5
+
+          # Get logs (last 100 lines)
+          aws logs tail /ecs/sipap-dev-migrations \
+            --since 15m \
+            --format short \
+            --filter-pattern "${{ steps.run-task.outputs.task_id }}" || true
+
+      - name: Check Migration Status
+        run: |
+          EXIT_CODE="${{ steps.wait-task.outputs.exit_code }}"
+          STOPPED_REASON="${{ steps.wait-task.outputs.stopped_reason }}"
+
+          echo "=============================================="
+          echo "Migration Task Results"
+          echo "=============================================="
+          echo "Exit Code: $EXIT_CODE"
+          echo "Stopped Reason: $STOPPED_REASON"
+          echo "=============================================="
+
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "✅ Database migration completed successfully!"
+            exit 0
+          else
+            echo "❌ Database migration failed with exit code: $EXIT_CODE"
+            echo "Stopped Reason: $STOPPED_REASON"
+            exit 1
+          fi
+
+      - name: Migration Summary
+        if: always()
+        run: |
+          EXIT_CODE="${{ steps.wait-task.outputs.exit_code }}"
+          TASK_ARN="${{ steps.run-task.outputs.task_arn }}"
+
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### 📋 Next Steps" >> "$GITHUB_STEP_SUMMARY"
+          echo "---" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "To run the database migration:" >> "$GITHUB_STEP_SUMMARY"
-          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
-          echo "# Get Terraform outputs" >> "$GITHUB_STEP_SUMMARY"
-          echo "cd sipap-terraform/" >> "$GITHUB_STEP_SUMMARY"
-          echo 'TASK_DEF=$(terraform output -raw migrations_task_definition)' >> "$GITHUB_STEP_SUMMARY"
-          echo 'PRIVATE_SUBNETS=$(terraform output -json private_subnet_ids | jq -r '"'"'join(",")'"'"')' >> "$GITHUB_STEP_SUMMARY"
-          echo 'DB_SG=$(terraform output -raw ecs_tasks_sg_id)' >> "$GITHUB_STEP_SUMMARY"
+          echo "### 🗄️ Database Migration Execution" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "# Run ECS migration task" >> "$GITHUB_STEP_SUMMARY"
-          echo "aws ecs run-task \\" >> "$GITHUB_STEP_SUMMARY"
-          echo "    --cluster sipap-dev-cluster \\" >> "$GITHUB_STEP_SUMMARY"
-          echo "    --task-definition \$TASK_DEF \\" >> "$GITHUB_STEP_SUMMARY"
-          echo "    --launch-type FARGATE \\" >> "$GITHUB_STEP_SUMMARY"
-          echo '    --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNETS],securityGroups=[$DB_SG],assignPublicIp=DISABLED}" \' >> "$GITHUB_STEP_SUMMARY"
-          echo "    --region us-east-1 \\" >> "$GITHUB_STEP_SUMMARY"
-          echo "    --profile odiraaws" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Task ARN** | \`$TASK_ARN\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Exit Code** | \`$EXIT_CODE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **CloudWatch Logs** | [View Logs](https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group/\$252Fecs\$252Fsipap-dev-migrations) |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$EXIT_CODE" = "0" ]; then
+            echo "| **Status** | ✅ Success |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| **Status** | ❌ Failed |" >> "$GITHUB_STEP_SUMMARY"
+          fi
