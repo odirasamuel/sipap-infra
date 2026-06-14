@@ -346,14 +346,38 @@ jobs:
         run: |
           echo "Fetching migration logs from CloudWatch..."
 
-          # Wait a few seconds for logs to be available
-          sleep 5
+          # Wait for logs to be written to CloudWatch
+          echo "Waiting 10 seconds for logs to be available..."
+          sleep 10
 
-          # Get logs (last 100 lines)
+          # Get logs without filter first (show all recent logs)
+          echo "==================== CloudWatch Logs (Last 15 minutes) ===================="
           aws logs tail /ecs/sipap-dev-migrations \
             --since 15m \
             --format short \
-            --filter-pattern "${{ steps.run-task.outputs.task_id }}" || true
+            --follow false || echo "⚠️ No logs found or error retrieving logs"
+
+          echo ""
+          echo "==================== Task-Specific Logs ===================="
+          # Try with task ID filter
+          aws logs tail /ecs/sipap-dev-migrations \
+            --since 15m \
+            --format short \
+            --filter-pattern "migrations/${{ steps.run-task.outputs.task_id }}" \
+            --follow false || echo "⚠️ No task-specific logs found"
+
+      - name: Get Detailed Task Information
+        if: always()
+        run: |
+          echo "==================== Detailed Task Information ===================="
+          TASK_ARN="${{ steps.run-task.outputs.task_arn }}"
+
+          # Get full task details
+          aws ecs describe-tasks \
+            --cluster sipap-dev-cluster \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].{lastStatus:lastStatus,stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason,lastStatus:lastStatus}}' \
+            --output json | jq '.'
 
       - name: Check Migration Status
         run: |
@@ -373,6 +397,13 @@ jobs:
           else
             echo "❌ Database migration failed with exit code: $EXIT_CODE"
             echo "Stopped Reason: $STOPPED_REASON"
+            echo ""
+            echo "💡 Common issues:"
+            echo "  - Exit 253: Container startup failure (check Dockerfile entrypoint)"
+            echo "  - Exit 255: Script execution error (check run-migration.sh)"
+            echo "  - Exit 1: Migration script failure (check SQL syntax)"
+            echo ""
+            echo "Check the CloudWatch logs above for detailed error messages"
             exit 1
           fi
 
