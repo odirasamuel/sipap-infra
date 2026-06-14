@@ -3,6 +3,7 @@ set -e
 
 echo "====================================="
 echo "SIPAP Database Migration Script"
+echo "Using Alembic for version-controlled migrations"
 echo "====================================="
 
 # Environment variables (passed from ECS task)
@@ -33,7 +34,8 @@ fi
 
 echo "Password retrieved successfully"
 
-# Set PGPASSWORD for psql
+# Export DB_PASSWORD for Alembic env.py
+export DB_PASSWORD
 export PGPASSWORD="$DB_PASSWORD"
 
 # Wait for database to be ready
@@ -46,35 +48,66 @@ done
 
 echo "Database is ready!"
 
-# Run schema migration
+# Check current migration status
 echo ""
 echo "====================================="
-echo "Running schema.sql migration..."
+echo "Checking migration status..."
 echo "====================================="
-psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f /migrations/schema.sql
+
+# Check if alembic_version table exists
+ALEMBIC_TABLE_EXISTS=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
+SELECT EXISTS (
+    SELECT FROM information_schema.tables
+    WHERE table_schema = 'public'
+    AND table_name = 'alembic_version'
+);
+" | tr -d ' ')
+
+if [ "$ALEMBIC_TABLE_EXISTS" = "t" ]; then
+    CURRENT_VERSION=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
+    SELECT version_num FROM alembic_version;
+    " | tr -d ' ')
+
+    if [ -n "$CURRENT_VERSION" ]; then
+        echo "Current migration version: $CURRENT_VERSION"
+    else
+        echo "No migrations applied yet (fresh database)"
+    fi
+else
+    echo "Fresh database - no migrations applied yet"
+fi
+
+# Run Alembic migrations
+echo ""
+echo "====================================="
+echo "Running Alembic migrations..."
+echo "====================================="
+
+cd /migrations
+
+# Show pending migrations
+echo "Pending migrations:"
+alembic history
+
+echo ""
+echo "Applying migrations..."
+alembic upgrade head
 
 if [ $? -eq 0 ]; then
-    echo "Schema migration completed successfully!"
+    echo "✅ Migrations applied successfully!"
 else
-    echo "ERROR: Schema migration failed"
+    echo "❌ ERROR: Migration failed"
     exit 1
 fi
 
-# Run seed data migration
-echo ""
-echo "====================================="
-echo "Running seed_data.sql migration..."
-echo "====================================="
-psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f /migrations/seed_data.sql
+# Get final migration version
+FINAL_VERSION=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
+SELECT version_num FROM alembic_version;
+" | tr -d ' ')
 
-if [ $? -eq 0 ]; then
-    echo "Seed data migration completed successfully!"
-else
-    echo "ERROR: Seed data migration failed"
-    exit 1
-fi
+echo "Final migration version: $FINAL_VERSION"
 
-# Verify tables created
+# Verify database schema
 echo ""
 echo "====================================="
 echo "Verifying database schema..."
@@ -88,19 +121,21 @@ WHERE schemaname = 'public'
 ORDER BY tablename;
 "
 
-# Count tables
+# Count tables (should be 10 application tables + 1 alembic_version)
 TABLE_COUNT=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
 SELECT COUNT(*)
 FROM pg_tables
-WHERE schemaname = 'public';
+WHERE schemaname = 'public'
+AND tablename != 'alembic_version';
 " | tr -d ' ')
 
 echo ""
 echo "====================================="
 echo "Migration Summary:"
 echo "====================================="
-echo "Tables created: $TABLE_COUNT"
-echo "Expected tables: 10"
+echo "Migration Version: $FINAL_VERSION"
+echo "Application Tables: $TABLE_COUNT"
+echo "Expected Tables: 10"
 
 if [ "$TABLE_COUNT" -eq 10 ]; then
     echo "✅ All tables created successfully!"

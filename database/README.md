@@ -3,12 +3,14 @@
 ## Table of Contents
 1. [What is Database Migration?](#what-is-database-migration)
 2. [Why We Need Database Migrations](#why-we-need-database-migrations)
-3. [Migration Architecture](#migration-architecture)
-4. [Directory Structure](#directory-structure)
-5. [Migration Process](#migration-process)
-6. [Files Explained](#files-explained)
-7. [How to Run Migrations](#how-to-run-migrations)
-8. [Troubleshooting](#troubleshooting)
+3. [Alembic: Version-Controlled Migrations](#alembic-version-controlled-migrations)
+4. [Migration Architecture](#migration-architecture)
+5. [Directory Structure](#directory-structure)
+6. [Migration Process](#migration-process)
+7. [Files Explained](#files-explained)
+8. [How to Run Migrations](#how-to-run-migrations)
+9. [Creating New Migrations](#creating-new-migrations)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -53,6 +55,92 @@ As SIPAP grows, we'll need to:
 - Update reference data (e.g., add new sports like Rugby, Tennis)
 
 Migrations make this **safe, predictable, and reversible**.
+
+---
+
+## Alembic: Version-Controlled Migrations
+
+**Since 2026-06-14**, SIPAP uses [Alembic](https://alembic.sqlalchemy.org/) for database migrations — bringing Git-like version control to our database schema.
+
+### What is Alembic?
+
+**Alembic is Git for your database schema.** Just like Git tracks code changes, Alembic tracks database schema changes over time with versioned migration files.
+
+### Key Benefits
+
+**1. Version Control**
+- Each schema change is a numbered migration file
+- Clear history of what changed when
+- Stored in Git alongside application code
+
+**2. Upgrade & Downgrade**
+- **Upgrade:** Apply schema changes (move forward)
+- **Downgrade:** Undo schema changes (rollback)
+
+**3. Multi-Environment Consistency**
+- Same migrations run in dev, staging, prod
+- Guaranteed identical schema across environments
+
+**4. Automated Deployments**
+- `alembic upgrade head` applies all pending migrations
+- Integrated with GitHub Actions workflow
+- Zero manual SQL execution
+
+### Migration Files
+
+All migrations live in `alembic/versions/`:
+
+```
+alembic/versions/
+└── 20260614_001_initial_schema.py    # Baseline: 10 tables + seed data
+```
+
+**Future migrations (examples):**
+```
+alembic/versions/
+├── 20260614_001_initial_schema.py
+├── 20260620_002_add_email_verified.py       # Add column
+├── 20260625_003_create_agent_metrics.py     # New table
+└── 20260630_004_add_confidence_score.py     # Modify predictions
+```
+
+### How It Works
+
+**Applying Migrations:**
+```bash
+# Inside migration container
+alembic upgrade head
+
+# Output:
+# INFO  [alembic.runtime.migration] Running upgrade  -> 20260614_001, initial schema
+# INFO  [alembic.runtime.migration] Running upgrade 20260614_001 -> 20260620_002, add email_verified
+```
+
+**Rolling Back:**
+```bash
+alembic downgrade -1  # Rollback last migration
+alembic downgrade 20260614_001  # Rollback to specific version
+```
+
+**Viewing History:**
+```bash
+alembic history
+
+# Output:
+# 20260620_002 -> 20260625_003 (head), create agent_metrics
+# 20260614_001 -> 20260620_002, add email_verified to users
+# <base> -> 20260614_001, initial schema and seed data
+```
+
+### For Detailed Alembic Usage
+
+See **[ALEMBIC-GUIDE.md](./ALEMBIC-GUIDE.md)** for:
+- Creating new migrations
+- Testing migrations locally
+- Rolling back migrations
+- Best practices
+- Common migration patterns
+- Troubleshooting
 
 ---
 
@@ -130,11 +218,19 @@ SIPAP uses a **containerized migration system** running on **ECS Fargate** for s
 
 ```
 sipap-terraform/database/
-├── README.md              # This file - comprehensive migration guide
-├── Dockerfile             # Container definition for migration runner
-├── run-migration.sh       # Bash script executed inside container
-├── schema.sql             # Database schema (CREATE TABLE statements)
-├── seed_data.sql          # Reference data (INSERT statements)
+├── README.md                  # This file - comprehensive migration guide
+├── ALEMBIC-GUIDE.md           # Detailed Alembic usage guide
+├── MIGRATION-SUMMARY.md       # Executive summary
+├── Dockerfile                 # Container definition (includes Python + Alembic)
+├── run-migration.sh           # Bash script (uses Alembic for migrations)
+├── alembic.ini                # Alembic configuration
+├── alembic/                   # Alembic migration files
+│   ├── env.py                 # Alembic environment setup
+│   ├── script.py.mako         # Template for new migrations
+│   └── versions/              # Migration files (version-controlled)
+│       └── 20260614_001_initial_schema.py  # Baseline migration
+├── schema.sql                 # Legacy SQL (used by baseline migration)
+├── seed_data.sql              # Legacy SQL (used by baseline migration)
 └── deploy-and-run-migrations.sh  # Local development helper (deprecated)
 ```
 
@@ -571,6 +667,125 @@ aws ecs describe-tasks \
    - Auto-assign public IP: `DISABLED`
 5. **Monitor**: View task in "Tasks" tab, click task ID → "Logs" tab
 6. **Verify**: Check exit code (0 = success)
+
+---
+
+## Creating New Migrations
+
+As SIPAP evolves, you'll need to create new migrations for schema changes. Here's a quick guide.
+
+### Step 1: Create Migration File
+
+```bash
+cd database/
+alembic revision -m "add email_verified to users"
+```
+
+This generates: `alembic/versions/20260620_1430_add_email_verified_to_users.py`
+
+### Step 2: Edit Migration File
+
+```python
+"""add email_verified to users
+
+Revision ID: 20260620_1430
+Revises: 20260614_001
+Create Date: 2026-06-20 14:30:00
+"""
+from alembic import op
+import sqlalchemy as sa
+
+revision = '20260620_1430'
+down_revision = '20260614_001'  # Previous migration
+
+def upgrade() -> None:
+    """Add email_verified column to users table"""
+    op.add_column(
+        'users',
+        sa.Column('email_verified', sa.Boolean(), nullable=True, server_default='false')
+    )
+    # Create index for faster lookups
+    op.create_index('idx_users_email_verified', 'users', ['email_verified'])
+
+
+def downgrade() -> None:
+    """Remove email_verified column from users table"""
+    op.drop_index('idx_users_email_verified', table_name='users')
+    op.drop_column('users', 'email_verified')
+```
+
+### Step 3: Test Locally (Optional)
+
+```bash
+# Export database credentials
+export DB_HOST=localhost  # via port forwarding or bastion
+export DB_PORT=5432
+export DB_NAME=sipap_dev
+export DB_USER=sipap_admin
+export DB_PASSWORD=your_password
+
+# Apply migration
+alembic upgrade head
+
+# Verify
+psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c "\d users"
+
+# Rollback (if testing)
+alembic downgrade -1
+
+# Re-apply
+alembic upgrade head
+```
+
+### Step 4: Commit and Deploy
+
+```bash
+git add database/alembic/versions/20260620_1430_add_email_verified_to_users.py
+git commit -m "Add email_verified column to users table"
+git push origin main
+```
+
+GitHub Actions will automatically:
+1. Build Docker image with new migration
+2. Push to ECR
+3. Run ECS task
+4. Execute `alembic upgrade head`
+5. Apply your new migration
+
+### Common Migration Patterns
+
+**Add Column:**
+```python
+op.add_column('users', sa.Column('email_verified', sa.Boolean()))
+```
+
+**Create Table:**
+```python
+op.create_table(
+    'agent_metrics',
+    sa.Column('id', sa.UUID(), primary_key=True),
+    sa.Column('agent_name', sa.String(100), nullable=False),
+    sa.Column('response_time_ms', sa.Integer()),
+)
+```
+
+**Add Index:**
+```python
+op.create_index('idx_predictions_match_id', 'predictions', ['match_id'])
+```
+
+**Execute Raw SQL:**
+```python
+op.execute("CREATE OR REPLACE FUNCTION update_updated_at() ...")
+```
+
+### For More Details
+
+See **[ALEMBIC-GUIDE.md](./ALEMBIC-GUIDE.md)** for:
+- Complete migration patterns (modify column, rename, etc.)
+- Testing best practices
+- Rollback procedures
+- Troubleshooting
 
 ---
 
