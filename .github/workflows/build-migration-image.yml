@@ -1,0 +1,166 @@
+name: Build & Push Database Migration Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'database/**'
+      - '.github/workflows/build-migration-image.yml'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even without changes'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: sipap-migrations
+  IMAGE_TAG: latest
+
+jobs:
+  build-and-push:
+    name: Build Migration Image + Push to ECR
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: sipap-migrations-build
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: |
+          aws sts get-caller-identity
+          echo "AWS Region: $AWS_REGION"
+          echo "ECR Repository: $ECR_REPOSITORY"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Migration Image
+        working-directory: database
+        run: |
+          echo "=============================================="
+          echo "Component:   Database Migrations"
+          echo "Environment: Development"
+          echo "Image Tag:   ${IMAGE_TAG}"
+          echo "Platform:    linux/amd64 (ECS Fargate compatible)"
+          echo "=============================================="
+
+          # Get ECR repository URL
+          ECR_REGISTRY=$(aws ecr describe-repositories \
+            --repository-names ${ECR_REPOSITORY} \
+            --query 'repositories[0].repositoryUri' \
+            --output text | cut -d'/' -f1)
+
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          echo "Building image: ${IMAGE_URI}"
+
+          # Build for amd64 platform (ECS Fargate architecture)
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag ${IMAGE_URI} \
+            --push \
+            .
+
+          echo "✅ Successfully built and pushed: ${IMAGE_URI}"
+
+      - name: Get Image Digest
+        id: image-digest
+        run: |
+          DIGEST=$(aws ecr describe-images \
+            --repository-name ${ECR_REPOSITORY} \
+            --image-ids imageTag=${IMAGE_TAG} \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "ERROR: Could not resolve digest for ${ECR_REPOSITORY}:${IMAGE_TAG}"
+            exit 1
+          fi
+
+          echo "Resolved digest: $DIGEST"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Force Update ECS Task Definition
+        run: |
+          echo "Forcing new ECS task definition revision..."
+
+          # Get current task definition
+          TASK_DEF_ARN=$(aws ecs list-task-definitions \
+            --family-prefix sipap-dev-migrations \
+            --sort DESC \
+            --max-items 1 \
+            --query 'taskDefinitionArns[0]' \
+            --output text)
+
+          if [ -z "$TASK_DEF_ARN" ] || [ "$TASK_DEF_ARN" = "None" ]; then
+            echo "⚠️  No existing task definition found. Skipping update."
+            echo "ℹ️  Run 'terraform apply' to create the task definition."
+            exit 0
+          fi
+
+          # Get task definition JSON
+          TASK_DEF_JSON=$(aws ecs describe-task-definition \
+            --task-definition ${TASK_DEF_ARN} \
+            --query 'taskDefinition' \
+            --output json)
+
+          # Register new revision (forces ECS to pull new image)
+          NEW_TASK_DEF=$(echo "$TASK_DEF_JSON" | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+
+          aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" > /dev/null
+
+          echo "✅ New task definition revision registered"
+
+      - name: Build Summary
+        run: |
+          echo "### 🚀 Database Migration Image Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Component** | Database Migrations |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Image Tag** | \`${IMAGE_TAG}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Image Digest** | \`${{ steps.image-digest.outputs.digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **ECR Repository** | \`${ECR_REPOSITORY}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Platform** | \`linux/amd64\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Triggered By** | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Status** | ✅ Success |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 📋 Next Steps" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "To run the database migration:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo "# Get Terraform outputs" >> "$GITHUB_STEP_SUMMARY"
+          echo "cd sipap-terraform/" >> "$GITHUB_STEP_SUMMARY"
+          echo 'TASK_DEF=$(terraform output -raw migrations_task_definition)' >> "$GITHUB_STEP_SUMMARY"
+          echo 'PRIVATE_SUBNETS=$(terraform output -json private_subnet_ids | jq -r '"'"'join(",")'"'"')' >> "$GITHUB_STEP_SUMMARY"
+          echo 'DB_SG=$(terraform output -raw ecs_tasks_sg_id)' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "# Run ECS migration task" >> "$GITHUB_STEP_SUMMARY"
+          echo "aws ecs run-task \\" >> "$GITHUB_STEP_SUMMARY"
+          echo "    --cluster sipap-dev-cluster \\" >> "$GITHUB_STEP_SUMMARY"
+          echo "    --task-definition \$TASK_DEF \\" >> "$GITHUB_STEP_SUMMARY"
+          echo "    --launch-type FARGATE \\" >> "$GITHUB_STEP_SUMMARY"
+          echo '    --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNETS],securityGroups=[$DB_SG],assignPublicIp=DISABLED}" \' >> "$GITHUB_STEP_SUMMARY"
+          echo "    --region us-east-1 \\" >> "$GITHUB_STEP_SUMMARY"
+          echo "    --profile odiraaws" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
