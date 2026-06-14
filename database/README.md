@@ -738,6 +738,30 @@ database/
 
 ---
 
+## Recent Updates
+
+### 2026-06-14: Task Role Fix for Secrets Manager Access
+
+**Issue**: Migration container was failing with exit code 253 ("Unable to locate credentials") when attempting to retrieve database password from AWS Secrets Manager.
+
+**Root Cause**: ECS task definition only had `execution_role_arn` (for ECS service operations like pulling images and writing logs) but was missing `task_role_arn` (for container AWS API calls).
+
+**Resolution**: Added dedicated task role in `migrations.tf`:
+- Created `aws_iam_role.migrations_task_role` with AssumeRole policy for `ecs-tasks.amazonaws.com`
+- Created `aws_iam_role_policy.migrations_task_policy` granting `secretsmanager:GetSecretValue` permission
+- Added `task_role_arn` parameter to `aws_ecs_task_definition.migrations`
+
+**Terraform Apply Result**:
+```
+Plan: 3 to add, 0 to change, 1 to destroy.
+Apply complete! Resources: 3 added, 0 changed, 1 destroyed.
+migrations_task_definition = "arn:aws:ecs:us-east-1:810278669998:task-definition/sipap-dev-migrations:7"
+```
+
+**Expected Outcome**: Migration task should now complete with exit code 0, creating 10 tables and loading seed data.
+
+---
+
 ## Support
 
 For questions or issues:
