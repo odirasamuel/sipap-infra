@@ -354,8 +354,7 @@ jobs:
           echo "==================== CloudWatch Logs (Last 15 minutes) ===================="
           aws logs tail /ecs/sipap-dev-migrations \
             --since 15m \
-            --format short \
-            --follow false || echo "⚠️ No logs found or error retrieving logs"
+            --format short 2>&1 | head -100 || echo "⚠️ No logs found or error retrieving logs"
 
           echo ""
           echo "==================== Task-Specific Logs ===================="
@@ -363,8 +362,7 @@ jobs:
           aws logs tail /ecs/sipap-dev-migrations \
             --since 15m \
             --format short \
-            --filter-pattern "migrations/${{ steps.run-task.outputs.task_id }}" \
-            --follow false || echo "⚠️ No task-specific logs found"
+            --filter-pattern "migrations/${{ steps.run-task.outputs.task_id }}" 2>&1 | head -100 || echo "⚠️ No task-specific logs found"
 
       - name: Get Detailed Task Information
         if: always()

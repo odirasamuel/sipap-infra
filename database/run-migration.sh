@@ -74,7 +74,34 @@ if [ "$ALEMBIC_TABLE_EXISTS" = "t" ]; then
         echo "No migrations applied yet (fresh database)"
     fi
 else
-    echo "Fresh database - no migrations applied yet"
+    echo "Fresh database - checking if tables already exist from legacy migration..."
+
+    # Check if users table exists (indicator that old migration ran)
+    USERS_TABLE_EXISTS=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
+    SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = 'users'
+    );
+    " | tr -d ' ')
+
+    if [ "$USERS_TABLE_EXISTS" = "t" ]; then
+        echo "⚠️  Tables already exist from legacy migration!"
+        echo "Stamping baseline migration (20260614_001) as applied..."
+
+        cd /migrations
+        alembic stamp 20260614_001
+
+        if [ $? -eq 0 ]; then
+            echo "✅ Baseline migration stamped successfully"
+            echo "Database is now under Alembic version control"
+        else
+            echo "❌ ERROR: Failed to stamp baseline migration"
+            exit 1
+        fi
+    else
+        echo "No existing tables found - will run migrations from scratch"
+    fi
 fi
 
 # Run Alembic migrations
