@@ -1,0 +1,211 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "EKSClusterManagement",
+            "Effect": "Allow",
+            "Action": [
+                "eks:CreateCluster",
+                "eks:DeleteCluster",
+                "eks:DescribeCluster",
+                "eks:ListClusters",
+                "eks:UpdateClusterConfig",
+                "eks:UpdateClusterVersion",
+                "eks:TagResource",
+                "eks:UntagResource",
+                "eks:ListTagsForResource",
+                "eks:CreateFargateProfile",
+                "eks:DeleteFargateProfile",
+                "eks:DescribeFargateProfile",
+                "eks:ListFargateProfiles",
+                "eks:CreateAddon",
+                "eks:DeleteAddon",
+                "eks:DescribeAddon",
+                "eks:DescribeAddonVersions",
+                "eks:ListAddons",
+                "eks:UpdateAddon",
+                "eks:DescribeUpdate",
+                "eks:ListUpdates",
+                "eks:AssociateEncryptionConfig",
+                "eks:DisassociateIdentityProviderConfig",
+                "eks:DescribeIdentityProviderConfig",
+                "eks:AssociateIdentityProviderConfig",
+                "eks:AccessKubernetesApi"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EKSAccessEntryManagement",
+            "Effect": "Allow",
+            "Action": [
+                "eks:CreateAccessEntry",
+                "eks:DeleteAccessEntry",
+                "eks:DescribeAccessEntry",
+                "eks:ListAccessEntries",
+                "eks:UpdateAccessEntry",
+                "eks:AssociateAccessPolicy",
+                "eks:DisassociateAccessPolicy",
+                "eks:ListAssociatedAccessPolicies"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "IAMRoleManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:GetRole",
+                "iam:ListRoles",
+                "iam:UpdateRole",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:ListRoleTags",
+                "iam:PutRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:GetRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListInstanceProfilesForRole",
+                "iam:PassRole"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "IAMPolicyManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreatePolicy",
+                "iam:DeletePolicy",
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion",
+                "iam:ListPolicies",
+                "iam:ListPolicyVersions",
+                "iam:CreatePolicyVersion",
+                "iam:DeletePolicyVersion",
+                "iam:SetDefaultPolicyVersion",
+                "iam:TagPolicy",
+                "iam:UntagPolicy"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "S3Management",
+            "Effect": "Allow",
+            "Action": [
+                "s3:CreateBucket",
+                "s3:DeleteBucket",
+                "s3:DeleteBucketPolicy",
+                "s3:DeleteObject",
+                "s3:DeleteObjectVersion",
+                "s3:GetBucketAcl",
+                "s3:GetBucketLocation",
+                "s3:GetBucketLogging",
+                "s3:GetBucketPolicy",
+                "s3:GetBucketPublicAccessBlock",
+                "s3:GetBucketVersioning",
+                "s3:GetObject",
+                "s3:GetObjectAcl",
+                "s3:GetObjectVersion",
+                "s3:ListAllMyBuckets",
+                "s3:ListBucket",
+                "s3:ListBucketVersions",
+                "s3:PutBucketAcl",
+                "s3:PutBucketLogging",
+                "s3:PutBucketPolicy",
+                "s3:PutBucketPublicAccessBlock",
+                "s3:PutBucketVersioning",
+                "s3:PutObject",
+                "s3:PutObjectAcl",
+                "s3:RestoreObject",
+                "s3:GetBucketCORS",
+                "s3:PutBucketCORS",
+                "s3:GetBucketWebsite",
+                "s3:GetBucketRequestPayment",
+                "s3:GetLifecycleConfiguration",
+                "s3:GetReplicationConfiguration",
+                "s3:GetEncryptionConfiguration",
+                "s3:GetBucketObjectLockConfiguration",
+                "s3:PutEncryptionConfiguration",
+                "s3:GetBucketTagging",
+                "s3:PutBucketTagging",
+                "s3:GetAccelerateConfiguration",
+                "s3:PutLifecycleConfiguration",
+                "s3:GetObjectTagging"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "APIGatewayV2Operations",
+            "Effect": "Allow",
+            "Action": [
+                "apigateway:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "APIGatewayIAMRoleManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:GetRole",
+                "iam:DeleteRole",
+                "iam:PutRolePolicy",
+                "iam:GetRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:TagRole",
+                "iam:UntagRole"
+            ],
+            "Resource": "arn:aws:iam::${account_id}:role/*-apigw-cloudwatch-role"
+        },
+        {
+            "Sid": "APIGatewayAccountConfiguration",
+            "Effect": "Allow",
+            "Action": [
+                "apigateway:GET",
+                "apigateway:PATCH"
+            ],
+            "Resource": "arn:aws:apigateway:us-east-1::/account"
+        },
+        {                                                                                                                                                                                                   
+            "Sid": "ElastiCacheVPCEndpointPermissions",                                                                                                                                                       
+            "Effect": "Allow",                                                                                                                                                                                
+            "Action": [                                                                                                                                                                                       
+                "ec2:CreateVpcEndpoint",                                                                                                                                                                        
+                "ec2:DescribeVpcEndpoints",                                                                                                                                                                     
+                "ec2:ModifyVpcEndpoint",                                                                                                                                                                        
+                "ec2:DeleteVpcEndpoints",                                                                                                                                                                       
+                "ec2:CreateTags",                                                                                                                                                                               
+                "ec2:DescribeSecurityGroups",                                                                                                                                                                   
+                "ec2:DescribeSubnets",                                                                                                                                                                          
+                "ec2:DescribeVpcs",                                                                                                                                                                             
+                "ec2:DescribeRouteTables"                                                                                                                                                                       
+            ],                                                                                                                                                                                                
+            "Resource": "*"                                                                                                                                                                                   
+        },                                                                                                                                                                                                  
+        {                                                                                                                                                                                                   
+            "Sid": "IAMSelfInspection",                                                                                                                                                                       
+            "Effect": "Allow",                                                                                                                                                                                
+            "Action": [                                                                                                                                                                                       
+                "iam:ListAttachedUserPolicies",                                                                                                                                                                 
+                "iam:ListUserPolicies",                                                                                                                                                                         
+                "iam:GetUser",                                                                                                                                                                                  
+                "iam:GetUserPolicy"                                                                                                                                                                             
+            ],                                                                                                                                                                                                
+            "Resource": "arn:aws:iam::${account_id}:user/cloud_engineer"
+        },
+        {                                                                                                                                                                                                   
+            "Sid": "CloudTrailReadForTroubleshooting",                                                                                                                                                        
+            "Effect": "Allow",                                                                                                                                                                                
+            "Action": [                                                                                                                                                                                       
+                "cloudtrail:LookupEvents"                                                                                                                                                                       
+            ],                                                                                                                                                                                                
+            "Resource": "*"                                                                                                                                                                                   
+        }
+    ]
+}

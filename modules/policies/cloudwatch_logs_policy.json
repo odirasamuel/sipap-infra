@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudWatchLogsAccess",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:DescribeLogGroups"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/fargate/sipap-dev*",
+        "arn:aws:logs:us-east-1:${account_id}:log-group:/app/*",
+        "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/ecs/sipap-dev/*"
+      ]
+    }
+  ]
+}

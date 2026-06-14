@@ -1,0 +1,226 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "KMSKeyManagement",
+            "Effect": "Allow",
+            "Action": [
+                "kms:CreateKey",
+                "kms:CreateAlias",
+                "kms:DeleteAlias",
+                "kms:DescribeKey",
+                "kms:GetKeyPolicy",
+                "kms:PutKeyPolicy",
+                "kms:ListKeys",
+                "kms:ListAliases",
+                "kms:ListResourceTags",
+                "kms:TagResource",
+                "kms:UntagResource",
+                "kms:ScheduleKeyDeletion",
+                "kms:CancelKeyDeletion",
+                "kms:EnableKey",
+                "kms:DisableKey",
+                "kms:GetKeyRotationStatus",
+                "kms:EnableKeyRotation",
+                "kms:DisableKeyRotation"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "KMSCryptoOperations",
+            "Effect": "Allow",
+            "Action": [
+                "kms:Decrypt",
+                "kms:Encrypt",
+                "kms:GenerateDataKey",
+                "kms:GenerateDataKeyWithoutPlaintext",
+                "kms:DescribeKey",
+                "kms:CreateGrant",
+                "kms:RetireGrant",
+                "kms:RevokeGrant",
+                "kms:ListGrants"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AutoScalingManagement",
+            "Effect": "Allow",
+            "Action": [
+                "autoscaling:CreateAutoScalingGroup",
+                "autoscaling:DeleteAutoScalingGroup",
+                "autoscaling:DescribeAutoScalingGroups",
+                "autoscaling:UpdateAutoScalingGroup",
+                "autoscaling:CreateLaunchConfiguration",
+                "autoscaling:DeleteLaunchConfiguration",
+                "autoscaling:DescribeLaunchConfigurations",
+                "autoscaling:AttachLoadBalancers",
+                "autoscaling:DetachLoadBalancers",
+                "autoscaling:PutScalingPolicy",
+                "autoscaling:DeletePolicy",
+                "autoscaling:DescribePolicies",
+                "autoscaling:PutScheduledUpdateGroupAction",
+                "autoscaling:DeleteScheduledAction",
+                "autoscaling:DescribeScheduledActions"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ElasticLoadBalancingManagement",
+            "Effect": "Allow",
+            "Action": [
+                "elasticloadbalancing:CreateLoadBalancer",
+                "elasticloadbalancing:DeleteLoadBalancer",
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:ModifyLoadBalancerAttributes",
+                "elasticloadbalancing:CreateTargetGroup",
+                "elasticloadbalancing:DeleteTargetGroup",
+                "elasticloadbalancing:DescribeTargetGroups",
+                "elasticloadbalancing:ModifyTargetGroup",
+                "elasticloadbalancing:ModifyTargetGroupAttributes",
+                "elasticloadbalancing:RegisterTargets",
+                "elasticloadbalancing:DeregisterTargets",
+                "elasticloadbalancing:DescribeTargetHealth",
+                "elasticloadbalancing:CreateListener",
+                "elasticloadbalancing:DeleteListener",
+                "elasticloadbalancing:DescribeListeners",
+                "elasticloadbalancing:ModifyListener",
+                "elasticloadbalancing:CreateRule",
+                "elasticloadbalancing:DeleteRule",
+                "elasticloadbalancing:DescribeRules",
+                "elasticloadbalancing:ModifyRule",
+                "elasticloadbalancing:AddTags",
+                "elasticloadbalancing:RemoveTags",
+                "elasticloadbalancing:DescribeTags",
+                "elasticloadbalancing:SetSecurityGroups",
+                "elasticloadbalancing:SetSubnets",
+                "elasticloadbalancing:SetIpAddressType",
+                "elasticloadbalancing:DescribeLoadBalancerAttributes",
+                "elasticloadbalancing:DescribeTargetGroupAttributes",
+                "elasticloadbalancing:DescribeListenerCertificates",
+                "elasticloadbalancing:AddListenerCertificates",
+                "elasticloadbalancing:RemoveListenerCertificates"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ApplicationAutoScaling",
+            "Effect": "Allow",
+            "Action": [
+                "application-autoscaling:RegisterScalableTarget",
+                "application-autoscaling:DeregisterScalableTarget",
+                "application-autoscaling:DescribeScalableTargets",
+                "application-autoscaling:PutScalingPolicy",
+                "application-autoscaling:DeleteScalingPolicy",
+                "application-autoscaling:DescribeScalingPolicies",
+                "application-autoscaling:DescribeScalingActivities"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ServiceDiscovery",
+            "Effect": "Allow",
+            "Action": [
+                "servicediscovery:CreatePrivateDnsNamespace",
+                "servicediscovery:DeleteNamespace",
+                "servicediscovery:GetNamespace",
+                "servicediscovery:ListNamespaces",
+                "servicediscovery:CreateService",
+                "servicediscovery:DeleteService",
+                "servicediscovery:GetService",
+                "servicediscovery:ListServices",
+                "servicediscovery:RegisterInstance",
+                "servicediscovery:DeregisterInstance",
+                "servicediscovery:GetInstance",
+                "servicediscovery:ListInstances",
+                "servicediscovery:TagResource",
+                "servicediscovery:UntagResource",
+                "servicediscovery:ListTagsForResource"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EventBridgeManagement",
+            "Effect": "Allow",
+            "Action": [
+                "events:PutRule",
+                "events:DeleteRule",
+                "events:DescribeRule",
+                "events:ListRules",
+                "events:PutTargets",
+                "events:RemoveTargets",
+                "events:ListTargetsByRule",
+                "events:TagResource",
+                "events:UntagResource",
+                "events:ListTagsForResource"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "SNSManagement",
+            "Effect": "Allow",
+            "Action": [
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:GetTopicAttributes",
+                "sns:SetTopicAttributes",
+                "sns:ListTopics",
+                "sns:Subscribe",
+                "sns:Unsubscribe",
+                "sns:ListSubscriptions",
+                "sns:ListSubscriptionsByTopic",
+                "sns:Publish",
+                "sns:TagResource",
+                "sns:UntagResource",
+                "sns:ListTagsForResource"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ResourceGroupsTagging",
+            "Effect": "Allow",
+            "Action": [
+                "tag:GetResources",
+                "tag:TagResources",
+                "tag:UntagResources",
+                "tag:GetTagKeys",
+                "tag:GetTagValues"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "OrganizationsReadAccess",
+            "Effect": "Allow",
+            "Action": [
+                "organizations:DescribeOrganization",
+                "organizations:ListAccounts",
+                "organizations:DescribeAccount"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "GlobalAcceleratorManagement",
+            "Effect": "Allow",
+            "Action": [
+                "globalaccelerator:CreateAccelerator",
+                "globalaccelerator:DeleteAccelerator",
+                "globalaccelerator:DescribeAccelerator",
+                "globalaccelerator:ListAccelerators",
+                "globalaccelerator:UpdateAccelerator",
+                "globalaccelerator:CreateListener",
+                "globalaccelerator:DeleteListener",
+                "globalaccelerator:DescribeListener",
+                "globalaccelerator:ListListeners",
+                "globalaccelerator:UpdateListener",
+                "globalaccelerator:CreateEndpointGroup",
+                "globalaccelerator:DeleteEndpointGroup",
+                "globalaccelerator:DescribeEndpointGroup",
+                "globalaccelerator:ListEndpointGroups",
+                "globalaccelerator:UpdateEndpointGroup",
+                "globalaccelerator:TagResource",
+                "globalaccelerator:UntagResource",
+                "globalaccelerator:ListTagsForResource"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

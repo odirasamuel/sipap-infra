@@ -1,0 +1,86 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DynamoDBAllowPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:ListTables",
+        "dynamodb:DescribeTable",
+        "dynamodb:DeleteItem",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Scan",
+        "dynamodb:Query",
+        "dynamodb:UpdateItem",
+        "dynamodb:GetRecords"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:${account_id}:table/sipap*"
+      ]
+    },
+    {
+      "Sid": "ParameterStoreAllowPermission",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:DescribeParameters",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1:${account_id}:parameter/sre/sipap-*"
+    },
+    {
+      "Sid": "SecretManagerAllowPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": [
+        "arn:aws:secretsmanager:us-east-1:${account_id}:secret:/sre/sipap-*"
+      ]
+    },
+    {
+      "Sid": "KMSAllowDecrypt",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Resource": [
+        "arn:aws:kms:us-east-1:${account_id}:key/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowElastiCacheConnect",
+      "Effect": "Allow",
+      "Action": "elasticache:Connect",
+      "Resource": [
+        "arn:aws:elasticache:us-east-1:${account_id}:serverlesscache:sipap-valkey*"
+      ],
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "elasticache:UserAuthenticationMode": "IAM"
+        }
+      }
+    },
+    {
+      "Sid": "AllowInfraRoleAssume",
+      "Effect": "Allow",
+      "Action": "sts:AssumeRole",
+      "Resource": [
+        "arn:aws:iam::${account_id}:role/sipap-infrasre-role"
+      ]
+    }
+  ]
+}
