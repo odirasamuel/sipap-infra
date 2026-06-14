@@ -22,6 +22,52 @@ resource "aws_ecr_repository" "migrations" {
   )
 }
 
+# IAM Role for migration task (allows container to call AWS APIs)
+resource "aws_iam_role" "migrations_task_role" {
+  name = "${var.stack_name}-${var.env}-migrations-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(
+    {
+      Name = "${var.stack_name}-${var.env}-migrations-task-role"
+    },
+    var.additional_tags
+  )
+}
+
+# IAM Policy for migration task (Secrets Manager access)
+resource "aws_iam_role_policy" "migrations_task_policy" {
+  name = "secrets-manager-access"
+  role = aws_iam_role.migrations_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = [
+          module.aurora.password_secret_arn
+        ]
+      }
+    ]
+  })
+}
+
 # ECS Task Definition for migrations
 resource "aws_ecs_task_definition" "migrations" {
   family                   = "${var.stack_name}-${var.env}-migrations"
@@ -30,6 +76,7 @@ resource "aws_ecs_task_definition" "migrations" {
   cpu                      = "256"  # 0.25 vCPU
   memory                   = "512"  # 512 MB
   execution_role_arn       = module.ecs_task_execution_role.role_arn
+  task_role_arn            = aws_iam_role.migrations_task_role.arn
 
   container_definitions = jsonencode([
     {
