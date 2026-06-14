@@ -171,25 +171,38 @@ jobs:
           VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=sipap-dev-vpc" \
             --query 'Vpcs[0].VpcId' \
-            --output text)
+            --output text 2>/dev/null)
 
-          echo "VPC ID: $VPC_ID"
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            echo "❌ ERROR: Could not find VPC with tag Name=sipap-dev-vpc"
+            exit 1
+          fi
+          echo "✅ VPC ID: $VPC_ID"
 
           # Get private subnets
-          PRIVATE_SUBNETS=$(aws ec2 describe-subnets \
+          PRIVATE_SUBNETS_RAW=$(aws ec2 describe-subnets \
             --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*private*" \
             --query 'Subnets[*].SubnetId' \
-            --output text | tr '\t' ',')
+            --output text 2>/dev/null)
+          PRIVATE_SUBNETS=$(echo "$PRIVATE_SUBNETS_RAW" | tr '\t' ',' | tr -d '\n')
 
-          echo "Private Subnets: $PRIVATE_SUBNETS"
+          if [ -z "$PRIVATE_SUBNETS" ] || [ "$PRIVATE_SUBNETS" = "None" ]; then
+            echo "❌ ERROR: Could not find private subnets in VPC $VPC_ID"
+            exit 1
+          fi
+          echo "✅ Private Subnets: $PRIVATE_SUBNETS"
 
           # Get ECS tasks security group
           DB_SG=$(aws ec2 describe-security-groups \
             --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=sipap-dev-ecs-tasks-sg" \
             --query 'SecurityGroups[0].GroupId' \
-            --output text)
+            --output text 2>/dev/null)
 
-          echo "Security Group: $DB_SG"
+          if [ -z "$DB_SG" ] || [ "$DB_SG" = "None" ]; then
+            echo "❌ ERROR: Could not find security group with tag Name=sipap-dev-ecs-tasks-sg"
+            exit 1
+          fi
+          echo "✅ Security Group: $DB_SG"
 
           # Get task definition ARN
           TASK_DEF=$(aws ecs list-task-definitions \
@@ -197,11 +210,18 @@ jobs:
             --sort DESC \
             --max-items 1 \
             --query 'taskDefinitionArns[0]' \
-            --output text)
+            --output text 2>/dev/null)
 
-          echo "Task Definition: $TASK_DEF"
+          if [ -z "$TASK_DEF" ] || [ "$TASK_DEF" = "None" ]; then
+            echo "❌ ERROR: Could not find task definition with family sipap-dev-migrations"
+            exit 1
+          fi
+          echo "✅ Task Definition: $TASK_DEF"
 
-          # Export to outputs
+          # Validate all values before exporting
+          echo "✅ All VPC configuration values retrieved successfully"
+
+          # Export to outputs (safe now - all validated)
           echo "vpc_id=$VPC_ID" >> "$GITHUB_OUTPUT"
           echo "private_subnets=$PRIVATE_SUBNETS" >> "$GITHUB_OUTPUT"
           echo "security_group=$DB_SG" >> "$GITHUB_OUTPUT"
