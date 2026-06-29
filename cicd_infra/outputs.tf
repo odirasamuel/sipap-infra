@@ -1,17 +1,17 @@
-# output "lambda_packages_bucket_name" {
-#   description = "Name of the S3 bucket for Lambda packages"
-#   value       = aws_s3_bucket.lambda_packages.id
-# }
+output "lambda_packages_bucket_name" {
+  description = "Name of the S3 bucket for Lambda packages"
+  value       = aws_s3_bucket.lambda_packages.id
+}
 
-# output "lambda_packages_bucket_arn" {
-#   description = "ARN of the S3 bucket for Lambda packages"
-#   value       = aws_s3_bucket.lambda_packages.arn
-# }
+output "lambda_packages_bucket_arn" {
+  description = "ARN of the S3 bucket for Lambda packages"
+  value       = aws_s3_bucket.lambda_packages.arn
+}
 
-# output "lambda_packages_bucket_region" {
-#   description = "AWS region where the Lambda packages bucket is located"
-#   value       = aws_s3_bucket.lambda_packages.region
-# }
+output "lambda_packages_bucket_region" {
+  description = "AWS region where the Lambda packages bucket is located"
+  value       = aws_s3_bucket.lambda_packages.region
+}
 
 output "github_actions_role_arn" {
   description = "ARN of the IAM role for GitHub Actions (use this in GitHub secrets)"

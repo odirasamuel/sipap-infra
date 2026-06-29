@@ -1,69 +1,69 @@
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-# resource "aws_s3_bucket" "lambda_packages" {
-#   bucket = "${var.stack_name}-lambda-packages-${var.env}"
+resource "aws_s3_bucket" "lambda_packages" {
+  bucket = "${var.stack_name}-lambda-packages-${var.env}"
 
-#   tags = merge(
-#     {
-#       Name        = "${var.stack_name}-lambda-packages-${var.env}"
-#       Purpose     = "Store versioned Lambda deployment packages"
-#       Environment = var.env
-#     },
-#     var.additional_tags
-#   )
-# }
+  tags = merge(
+    {
+      Name        = "${var.stack_name}-lambda-packages-${var.env}"
+      Purpose     = "Store versioned Lambda deployment packages"
+      Environment = var.env
+    },
+    var.additional_tags
+  )
+}
 
-# # Enable versioning for rollback capability
-# resource "aws_s3_bucket_versioning" "lambda_packages" {
-#   bucket = aws_s3_bucket.lambda_packages.id
+# Enable versioning for rollback capability
+resource "aws_s3_bucket_versioning" "lambda_packages" {
+  bucket = aws_s3_bucket.lambda_packages.id
 
-#   versioning_configuration {
-#     status = "Enabled"
-#   }
-# }
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
 
-# # Enable server-side encryption
-# resource "aws_s3_bucket_server_side_encryption_configuration" "lambda_packages" {
-#   bucket = aws_s3_bucket.lambda_packages.id
+# Enable server-side encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "lambda_packages" {
+  bucket = aws_s3_bucket.lambda_packages.id
 
-#   rule {
-#     apply_server_side_encryption_by_default {
-#       sse_algorithm = "AES256"
-#     }
-#   }
-# }
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
 
-# # Block all public access
-# resource "aws_s3_bucket_public_access_block" "lambda_packages" {
-#   bucket = aws_s3_bucket.lambda_packages.id
+# Block all public access
+resource "aws_s3_bucket_public_access_block" "lambda_packages" {
+  bucket = aws_s3_bucket.lambda_packages.id
 
-#   block_public_acls       = true
-#   block_public_policy     = true
-#   ignore_public_acls      = true
-#   restrict_public_buckets = true
-# }
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
 
-# # Lifecycle policy for old versions
-# resource "aws_s3_bucket_lifecycle_configuration" "lambda_packages" {
-#   bucket = aws_s3_bucket.lambda_packages.id
+# Lifecycle policy for old versions
+resource "aws_s3_bucket_lifecycle_configuration" "lambda_packages" {
+  bucket = aws_s3_bucket.lambda_packages.id
 
-#   rule {
-#     id     = "cleanup-old-versions"
-#     status = "Enabled"
+  rule {
+    id     = "cleanup-old-versions"
+    status = "Enabled"
 
-#     # Apply to all objects in the bucket
-#     filter {}
+    # Apply to all objects in the bucket
+    filter {}
 
-#     noncurrent_version_expiration {
-#       noncurrent_days = var.lifecycle_noncurrent_days
-#     }
+    noncurrent_version_expiration {
+      noncurrent_days = var.lifecycle_noncurrent_days
+    }
 
-#     abort_incomplete_multipart_upload {
-#       days_after_initiation = 7
-#     }
-#   }
-# }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
 
 
 # GITHUB ACTIONS OIDC CONFIGURATION
@@ -115,27 +115,27 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
   }
 }
 
-# # IAM Policy for S3 and Lambda operations
-# data "aws_iam_policy_document" "github_actions_permissions" {
-#   # S3 permissions for Lambda packages bucket
-#   statement {
-#     sid = "S3LambdaPackagesAccess"
+# IAM Policy for S3 and Lambda operations
+data "aws_iam_policy_document" "github_actions_permissions" {
+  # S3 permissions for Lambda packages bucket
+  statement {
+    sid = "S3LambdaPackagesAccess"
 
-#     actions = [
-#       "s3:PutObject",
-#       "s3:GetObject",
-#       "s3:DeleteObject",
-#       "s3:ListBucket",
-#       "s3:GetObjectVersion",
-#       "s3:ListBucketVersions"
-#     ]
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObject",
+      "s3:ListBucket",
+      "s3:GetObjectVersion",
+      "s3:ListBucketVersions"
+    ]
 
-#     resources = [
-#       aws_s3_bucket.lambda_packages.arn,
-#       "${aws_s3_bucket.lambda_packages.arn}/*"
-#     ]
-#   }
-# }
+    resources = [
+      aws_s3_bucket.lambda_packages.arn,
+      "${aws_s3_bucket.lambda_packages.arn}/*"
+    ]
+  }
+}
 
 # Compute hashes of policy files to detect changes
 locals {
@@ -147,12 +147,12 @@ locals {
 }
 
 # Create customer-managed policies and attach to the role
-# # S3 Lambda packages policy
-# resource "aws_iam_policy" "github_actions_s3" {
-#   name        = "${var.stack_name}-${var.env}-github-actions-s3-policy"
-#   description = "S3 permissions for Lambda packages bucket"
-#   policy      = data.aws_iam_policy_document.github_actions_permissions.json
-# }
+# S3 Lambda packages policy
+resource "aws_iam_policy" "github_actions_s3" {
+  name        = "${var.stack_name}-${var.env}-github-actions-s3-policy"
+  description = "S3 permissions for Lambda packages bucket"
+  policy      = data.aws_iam_policy_document.github_actions_permissions.json
+}
 
 # # Deployment policy 1
 # resource "aws_iam_policy" "github_actions_deploy_1" {
@@ -227,10 +227,10 @@ resource "aws_iam_policy" "github_actions_deploy_5" {
 }
 
 # Attach all policies to the GitHub Actions role
-# resource "aws_iam_role_policy_attachment" "github_actions_s3" {
-#   role       = aws_iam_role.github_actions.name
-#   policy_arn = aws_iam_policy.github_actions_s3.arn
-# }
+resource "aws_iam_role_policy_attachment" "github_actions_s3" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = aws_iam_policy.github_actions_s3.arn
+}
 
 # resource "aws_iam_role_policy_attachment" "github_actions_deploy_1" {
 #   role       = aws_iam_role.github_actions.name

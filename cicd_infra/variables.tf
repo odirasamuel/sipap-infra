@@ -28,8 +28,8 @@ variable "additional_tags" {
   default     = {}
 }
 
-# variable "lifecycle_noncurrent_days" {
-#   description = "Number of days to retain noncurrent S3 object versions"
-#   type        = number
-#   default     = 90
-# }
+variable "lifecycle_noncurrent_days" {
+  description = "Number of days to retain noncurrent S3 object versions"
+  type        = number
+  default     = 90
+}
