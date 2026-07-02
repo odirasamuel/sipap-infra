@@ -4,12 +4,13 @@
 FROM postgres:15-alpine
 
 # Install system dependencies
+# Pin Python 3.12 (psycopg2-binary 2.9.9 not compatible with 3.14 yet)
 RUN apk add --no-cache \
     aws-cli \
     jq \
     bash \
     dos2unix \
-    python3 \
+    python3~=3.12 \
     py3-pip \
     postgresql-dev \
     gcc \
