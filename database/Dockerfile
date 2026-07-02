@@ -26,8 +26,9 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     rm -rf aws awscliv2.zip
 
 # Install Python packages for Alembic
-# Debian doesn't require --break-system-packages flag
-RUN pip3 install --no-cache-dir \
+# Note: --break-system-packages is safe in Docker containers (PEP 668)
+# Debian Bookworm has externally-managed-environment protection
+RUN pip3 install --no-cache-dir --break-system-packages \
     alembic==1.13.1 \
     psycopg2-binary==2.9.9 \
     SQLAlchemy==2.0.25
