@@ -42,3 +42,9 @@ output "mode" {
   description = "Database mode (Serverless v2 or Standard Instance)"
   value       = var.use_serverless ? "Aurora Serverless v2" : "Standard RDS Instance (${var.instance_class})"
 }
+
+output "master_password" {
+  description = "Master password (for internal use by batch scraper secrets module)"
+  value       = random_password.db_password.result
+  sensitive   = true
+}

@@ -4,10 +4,10 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "SIPAP"
-      ManagedBy   = "terraform"
       Environment = var.env
-      # Owner       = ""
+      ManagedBy   = "Terraform"
+      Project     = "SIPAP"
+      Component   = "Events-Infrastructure"
     }
   }
 }

@@ -72,6 +72,11 @@ output "ecs_cluster_name" {
   value       = module.ecs_cluster.cluster_name
 }
 
+output "ecs_cluster_arn" {
+  description = "ECS cluster ARN"
+  value       = module.ecs_cluster.cluster_arn
+}
+
 # SQS Outputs
 output "prediction_queue_url" {
   description = "SQS prediction queue URL"
@@ -81,6 +86,34 @@ output "prediction_queue_url" {
 output "prediction_dlq_url" {
   description = "SQS prediction DLQ URL"
   value       = aws_sqs_queue.prediction_dlq.url
+}
+
+# Secrets Manager Outputs
+output "aurora_credentials_secret_arn" {
+  description = "ARN of Aurora credentials secret"
+  value       = module.aurora_credentials_secret.secret_arn
+  sensitive   = true
+}
+
+output "api_keys_secret_arn" {
+  description = "ARN of API keys secret"
+  value       = module.api_keys_secret.secret_arn
+}
+
+output "api_keys_secret_name" {
+  description = "Name of API keys secret (for CLI population)"
+  value       = module.api_keys_secret.secret_name
+}
+
+output "populate_api_keys_cli_command" {
+  description = "AWS CLI command to populate API keys secret (use profile odiraaws)"
+  value       = <<-EOT
+    aws secretsmanager put-secret-value \
+      --secret-id ${module.api_keys_secret.secret_name} \
+      --secret-string '{"FOOTBALL_DATA_KEY":"your_key_here","ODDS_API_KEY":"your_key_here","THESPORTSDB_KEY":"123"}' \
+      --profile odiraaws \
+      --region ${var.aws_region}
+  EOT
 }
 
 # Security Group Outputs

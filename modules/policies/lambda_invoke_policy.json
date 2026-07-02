@@ -2,13 +2,14 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AllowLambdaInvoke",
       "Effect": "Allow",
       "Action": [
-        "lambda:InvokeFunction",
-        "lambda:InvokeFunctionUrl"
+        "lambda:InvokeFunction"
       ],
-      "Resource": "*"
+      "Resource": [
+        "${odds_updater_function_arn}",
+        "${fixture_updater_function_arn}"
+      ]
     }
   ]
 }

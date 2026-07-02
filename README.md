@@ -91,7 +91,7 @@ aws dynamodb create-table \
 ### 1. Initialize Terraform
 
 ```bash
-cd /Users/charlesotuya/AI-Odi/sentinel/sipap/repos/sipap-terraform
+cd ./sipap/repos/sipap-terraform
 terraform init
 ```
 
@@ -241,8 +241,8 @@ terraform destroy -var-file=environments/dev.tfvars
 ## References
 
 - **Plan**: `~/.claude/plans/luminous-kindling-cray.md`
-- **Sentinel Terraform**: `/Users/charlesotuya/AI-Odi/sentinel/repos/sentinel-terraform-master/sentinel_gce/`
-- **SIPAP Architecture**: `/Users/charlesotuya/AI-Odi/sentinel/sipap/technical-architecture-v2.md`
+- **Sentinel Terraform**: `./repos/sentinel-terraform-master/sentinel_gce/`
+- **SIPAP Architecture**: `./sipap/technical-architecture-v2.md`
 
 ## Support
 

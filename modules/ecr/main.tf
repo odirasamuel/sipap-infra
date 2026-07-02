@@ -4,7 +4,7 @@ data "aws_caller_identity" "current" {}
 resource "aws_ecr_repository" "app_repositories" {
   for_each = { for repo in var.repositories : repo.name => repo }
 
-  name                 = each.value.name
+  name                 = "${var.stack_name}-${var.env}-${each.value.name}"
   image_tag_mutability = each.value.image_tag_mutability
 
   encryption_configuration {

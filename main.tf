@@ -2,6 +2,16 @@
 # Following Sentinel's modular pattern
 
 # ============================================================================
+# LOCALS FOR POLICY CHANGE TRACKING
+# ============================================================================
+# Compute hashes of policy files to detect changes
+
+locals {
+  ecs_secrets_access_policy_hash = filesha256("${path.module}/modules/policies/ecs_secrets_access_policy.json")
+  sqs_send_messages_policy_hash  = filesha256("${path.module}/modules/policies/sqs_send_messages_policy.json")
+}
+
+# ============================================================================
 # NETWORKING
 # ============================================================================
 
@@ -142,18 +152,7 @@ module "ecs_task_execution_role" {
   stack_tool       = "ecs-task-execution"
   role_description = "ECS task execution role for pulling images and writing logs"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
+  assume_role_policy = templatefile("${path.module}/modules/assume_role_policies/ecs_task_assume_role.json", {})
 
   managed_policy_arns = [
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
@@ -161,24 +160,14 @@ module "ecs_task_execution_role" {
 
   inline_policies = [
     {
-      name = "secrets-access"
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-          {
-            Effect = "Allow"
-            Action = [
-              "secretsmanager:GetSecretValue",
-              "ssm:GetParameters"
-            ]
-            Resource = "*"
-          }
-        ]
-      })
+      name   = "secrets-access"
+      policy = templatefile("${path.module}/modules/policies/ecs_secrets_access_policy.json", {})
     }
   ]
 
-  additional_tags = var.additional_tags
+  additional_tags = merge(var.additional_tags, {
+    EcsSecretsAccessPolicyHash = local.ecs_secrets_access_policy_hash
+  })
 }
 
 # SQS Access Role (for services to send messages)
@@ -191,39 +180,18 @@ module "sqs_sender_role" {
   stack_tool       = "sqs-sender"
   role_description = "Role for services to send messages to SQS queues"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
+  assume_role_policy = templatefile("${path.module}/modules/assume_role_policies/ecs_task_assume_role.json", {})
 
   inline_policies = [
     {
-      name = "sqs-send-messages"
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-          {
-            Effect = "Allow"
-            Action = [
-              "sqs:SendMessage",
-              "sqs:GetQueueUrl"
-            ]
-            Resource = "*"
-          }
-        ]
-      })
+      name   = "sqs-send-messages"
+      policy = templatefile("${path.module}/modules/policies/sqs_send_messages_policy.json", {})
     }
   ]
 
-  additional_tags = var.additional_tags
+  additional_tags = merge(var.additional_tags, {
+    SqsSendMessagesPolicyHash = local.sqs_send_messages_policy_hash
+  })
 }
 
 # ============================================================================
@@ -240,12 +208,12 @@ module "aurora" {
   master_username = var.db_master_username
 
   # Serverless configuration (used when use_serverless = true)
-  min_capacity    = 0.5
-  max_capacity    = 1.0
+  min_capacity = 0.5
+  max_capacity = 1.0
 
   # Standard RDS configuration (used when use_serverless = false)
-  use_serverless  = var.aurora_use_serverless
-  instance_class  = var.aurora_instance_class
+  use_serverless = var.aurora_use_serverless
+  instance_class = var.aurora_instance_class
 
   subnet_ids      = module.subnets.private_subnet_ids
   vpc_id          = module.vpc.vpc_id
@@ -314,6 +282,9 @@ module "ecr" {
     },
     {
       name = "historical-data-mcp"
+    },
+    {
+      name = "batch-scraper"
     }
   ]
 
@@ -362,4 +333,58 @@ resource "aws_sqs_queue" "prediction_dlq" {
   tags = merge({
     Name = "${var.stack_name}-${var.env}-prediction-dlq"
   }, var.additional_tags)
+}
+
+# ============================================================================
+# SECRETS MANAGER
+# ============================================================================
+
+# Aurora Credentials Secret
+module "aurora_credentials_secret" {
+  source = "./modules/create_secret"
+
+  secret_name        = "${var.stack_name}/${var.env}/aurora-credentials"
+  secret_description = "Aurora PostgreSQL credentials for SIPAP"
+  replica_region     = null
+
+  secret_string = jsonencode({
+    username = var.db_master_username
+    password = module.aurora.master_password
+    host     = module.aurora.endpoint
+    port     = "5432"
+    database = var.database_name
+  })
+
+  additional_tags = merge(
+    {
+      Environment = var.env
+      ManagedBy   = "terraform"
+    },
+    var.additional_tags
+  )
+}
+
+# API Keys Secret (Placeholder - populated manually via AWS CLI)
+module "api_keys_secret" {
+  source = "./modules/create_secret"
+
+  secret_name        = "${var.stack_name}/${var.env}/api-keys"
+  secret_description = "API keys for SIPAP (Football-Data.org, The Odds API, TheSportsDB)"
+  replica_region     = null
+
+  # Empty secret - will be populated manually via AWS CLI with profile "odiraaws"
+  secret_string = jsonencode({
+    FOOTBALL_DATA_KEY = ""
+    ODDS_API_KEY      = ""
+    THESPORTSDB_KEY   = "123"
+  })
+
+  additional_tags = merge(
+    {
+      Environment = var.env
+      ManagedBy   = "terraform"
+      PopulatedBy = "manual-cli"
+    },
+    var.additional_tags
+  )
 }
