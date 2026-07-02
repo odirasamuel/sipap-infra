@@ -1,25 +1,33 @@
 # Database Migration Container
 # Runs PostgreSQL migrations for SIPAP using Alembic
+#
+# Note: Using Debian-based image instead of Alpine to avoid Python version conflicts
+# Debian allows us to use Python 3.12 with AWS CLI and psycopg2-binary
 
-FROM postgres:15-alpine
+FROM postgres:15-bookworm
 
 # Install system dependencies
-# Pin Python 3.12 (psycopg2-binary 2.9.9 not compatible with 3.14 yet)
-RUN apk add --no-cache \
-    aws-cli \
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
     jq \
-    bash \
     dos2unix \
-    python3~=3.12 \
-    py3-pip \
-    postgresql-dev \
+    python3 \
+    python3-pip \
+    python3-dev \
+    libpq-dev \
     gcc \
-    musl-dev \
-    python3-dev
+    && rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI v2 (standalone binary, doesn't interfere with Python)
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+    unzip awscliv2.zip && \
+    ./aws/install && \
+    rm -rf aws awscliv2.zip
 
 # Install Python packages for Alembic
-# Note: --break-system-packages is safe in Docker containers (PEP 668)
-RUN pip3 install --no-cache-dir --break-system-packages \
+# Debian doesn't require --break-system-packages flag
+RUN pip3 install --no-cache-dir \
     alembic==1.13.1 \
     psycopg2-binary==2.9.9 \
     SQLAlchemy==2.0.25
