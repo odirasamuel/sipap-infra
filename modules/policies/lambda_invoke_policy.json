@@ -8,6 +8,7 @@
       ],
       "Resource": [
         "${odds_updater_function_arn}",
+        "${api_football_odds_updater_function_arn}",
         "${fixture_updater_function_arn}"
       ]
     }
