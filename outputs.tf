@@ -137,3 +137,11 @@ output "sqs_sender_role_arn" {
   description = "SQS sender role ARN"
   value       = module.sqs_sender_role.role_arn
 }
+
+# ==============================================================================
+# NOTE: Lambda MCP outputs are in core_deploy/ (separate root module)
+# ==============================================================================
+# To see Lambda MCP outputs:
+#   cd core_deploy
+#   terraform output
+# ==============================================================================

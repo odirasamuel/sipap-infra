@@ -30,7 +30,7 @@
         "ssm:GetParameters",
         "ssm:GetParametersByPath"
       ],
-      "Resource": "arn:aws:ssm:us-east-1:${account_id}:parameter/sre/sipap-*"
+      "Resource": "arn:aws:ssm:us-east-1:${account_id}:parameter/sipap/*"
     },
     {
       "Sid": "SecretManagerAllowPermissions",
@@ -40,7 +40,8 @@
         "secretsmanager:DescribeSecret"
       ],
       "Resource": [
-        "arn:aws:secretsmanager:us-east-1:${account_id}:secret:/sre/sipap-*"
+        "arn:aws:secretsmanager:us-east-1:${account_id}:secret:sipap/*",
+        "arn:aws:secretsmanager:us-east-1:${account_id}:secret:/sipap/*"
       ]
     },
     {

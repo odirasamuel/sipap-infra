@@ -1,5 +1,4 @@
 # SIPAP Infrastructure - Main Terraform Configuration
-# Following Sentinel's modular pattern
 
 # ============================================================================
 # LOCALS FOR POLICY CHANGE TRACKING
@@ -388,3 +387,20 @@ module "api_keys_secret" {
     var.additional_tags
   )
 }
+
+# ============================================================================
+# NOTE: core_deploy/ is a separate root module
+# ============================================================================
+# Deploy Lambda MCPs separately:
+#   cd core_deploy
+#   terraform init
+#   terraform plan
+#   terraform apply
+#
+# Requires outputs from this root module:
+#   - VPC ID
+#   - Private subnet IDs
+#   - ElastiCache endpoint
+#   - Aurora endpoint
+#   - API keys secret ARN
+# ============================================================================

@@ -46,3 +46,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# MCP Tokens (SENSITIVE - DO NOT COMMIT!)
+mcp_tokens_*.txt
+*_tokens.txt

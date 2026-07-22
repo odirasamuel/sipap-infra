@@ -67,11 +67,7 @@ resource "aws_lambda_function" "internal_mcp_server" {
     }, var.internal_lambda_environment_variables)
   }
 
-  tags = merge({
-    Name             = var.internal_function_name
-    Owner            = "sentinel-automation"
-    DeploymentMethod = var.use_s3_deployment ? "S3" : "Local"
-  }, var.additional_tags)
+  # Note: aws_lambda_function uses tags, not tags attribute
 }
 
 resource "aws_lambda_function" "external_mcp_server" {
@@ -111,11 +107,7 @@ resource "aws_lambda_function" "external_mcp_server" {
     }, var.external_lambda_environment_variables)
   }
 
-  tags = merge({
-    Name             = var.external_function_name
-    Owner            = "sentinel-automation"
-    DeploymentMethod = var.use_s3_deployment ? "S3" : "Local"
-  }, var.additional_tags)
+  # Note: aws_lambda_function tags removed - use additional_tags via resource tagging
 }
 
 resource "aws_lambda_function_url" "internal_function_url" {
@@ -210,7 +202,7 @@ resource "aws_lambda_permission" "allow_orchestrator_external_url_invoke" {
 resource "aws_ssm_parameter" "internal_function_url" {
   count = var.create_internal_function && var.enable_function_url && var.create_ssm_parameter && var.ssm_service_identifier != "" ? 1 : 0
 
-  name        = var.ssm_parameter_name_override != "" ? var.ssm_parameter_name_override : "/sre/sentinel-mcp-${var.ssm_service_identifier}"
+  name        = var.ssm_parameter_name_override != "" ? var.ssm_parameter_name_override : "/sipap/mcp-${var.ssm_service_identifier}"
   description = "MCP Lambda Function URL configuration for ${var.internal_function_name}"
   type        = "String"
   tier        = "Standard"
@@ -221,7 +213,7 @@ resource "aws_ssm_parameter" "internal_function_url" {
   })
 
   tags = merge({
-    Name         = "/sre/sentinel-mcp-${var.ssm_service_identifier}"
+    Name         = "/sipap/mcp-${var.ssm_service_identifier}"
     ManagedBy    = "terraform"
     Service      = "lambda"
     FunctionName = var.internal_function_name
@@ -232,7 +224,7 @@ resource "aws_ssm_parameter" "internal_function_url" {
 resource "aws_ssm_parameter" "external_function_url" {
   count = var.create_external_function && var.enable_function_url && var.create_ssm_parameter_external && var.ssm_service_identifier_external != "" ? 1 : 0
 
-  name        = var.ssm_parameter_name_override_external != "" ? var.ssm_parameter_name_override_external : "/sre/sentinel-mcp-${var.ssm_service_identifier_external}"
+  name        = var.ssm_parameter_name_override_external != "" ? var.ssm_parameter_name_override_external : "/sipap/mcp-${var.ssm_service_identifier_external}"
   description = "MCP Lambda Function URL configuration for ${var.external_function_name}"
   type        = "String"
   tier        = "Standard"
@@ -243,7 +235,7 @@ resource "aws_ssm_parameter" "external_function_url" {
   })
 
   tags = merge({
-    Name         = "/sre/sentinel-mcp-${var.ssm_service_identifier_external}"
+    Name         = "/sipap/mcp-${var.ssm_service_identifier_external}"
     ManagedBy    = "terraform"
     Service      = "lambda"
     FunctionName = var.external_function_name
