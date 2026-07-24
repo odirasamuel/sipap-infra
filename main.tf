@@ -336,6 +336,10 @@ module "ecs_cluster" {
         service.environment_variables,
         [
           {
+            name  = "ORCHESTRATOR_MODE"
+            value = "daemon"  # daemon (SQS polling) or api (FastAPI server)
+          },
+          {
             name  = "DATA_MCP_URL"
             value = try(local.core_deploy_outputs.data_mcp_function_url, "")
           },
@@ -394,6 +398,8 @@ module "ecs_cluster" {
       container_definition_overrides = null
     }
   ]
+
+  enable_execute_command = true # For debugging/testing via ECS Exec
 
   additional_tags = var.additional_tags
 }
