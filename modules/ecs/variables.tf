@@ -109,6 +109,7 @@ variable "services" {
 
     enable_deployment_circuit_breaker = optional(bool, true)
     enable_deployment_rollback        = optional(bool, true)
+    force_new_deployment              = optional(bool, false)
   }))
 }
 

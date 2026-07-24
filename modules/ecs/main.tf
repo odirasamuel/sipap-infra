@@ -246,6 +246,7 @@ resource "aws_ecs_service" "app" {
   }
 
   enable_execute_command = var.enable_execute_command
+  force_new_deployment   = each.value.force_new_deployment
 
   depends_on = [
     aws_ecs_task_definition.app
