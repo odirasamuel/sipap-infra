@@ -1,13 +1,32 @@
 # SIPAP Infrastructure - Main Terraform Configuration
 
 # ============================================================================
-# LOCALS FOR POLICY CHANGE TRACKING
+# LOCALS FOR POLICY CHANGE TRACKING & ECS SERVICE CONFIGURATION
 # ============================================================================
 # Compute hashes of policy files to detect changes
 
 locals {
   ecs_secrets_access_policy_hash = filesha256("${path.module}/modules/policies/ecs_secrets_access_policy.json")
   sqs_send_messages_policy_hash  = filesha256("${path.module}/modules/policies/sqs_send_messages_policy.json")
+
+  # Pull core_deploy outputs for ECS service configuration
+  # Only populated if remote state exists and var.ecs_services is not empty
+  core_deploy_outputs = try(data.terraform_remote_state.core_deploy.outputs, {})
+}
+
+# ============================================================================
+# REMOTE STATE - Reference core_deploy outputs for ECS services
+# ============================================================================
+
+data "terraform_remote_state" "core_deploy" {
+  backend = "s3"
+
+  config = {
+    bucket  = "sipap-dev-tf-state-bucket"
+    key     = "sipap-dev-core-deploy-tf-state"
+    region  = "us-west-1"
+    profile = "odiraaws"
+  }
 }
 
 # ============================================================================
@@ -290,7 +309,7 @@ module "ecr" {
   additional_tags = var.additional_tags
 }
 
-# ECS Cluster (empty for now, services added in Phase 4)
+# ECS Cluster with orchestrator service
 module "ecs_cluster" {
   source = "./modules/ecs"
 
@@ -299,8 +318,84 @@ module "ecs_cluster" {
   vpc_id                  = module.vpc.vpc_id
   private_subnet_ids      = module.subnets.private_subnet_ids
   task_execution_role_arn = module.ecs_task_execution_role.role_arn
-  services                = [] # Services added in Phase 4
-  additional_tags         = var.additional_tags
+
+  # Transform services from tfvars, injecting dynamic values from remote state
+  services = [
+    for service in var.ecs_services : {
+      name          = service.name
+      image         = service.image
+      cpu           = service.cpu
+      memory        = service.memory
+      desired_count = service.desired_count
+      task_role_arn = try(local.core_deploy_outputs.orchestrator_task_role_arn, null)
+
+      port_mappings = service.port_mappings
+
+      # Merge static env vars from tfvars with dynamic values from remote state
+      environment_variables = concat(
+        service.environment_variables,
+        [
+          {
+            name  = "DATA_MCP_URL"
+            value = try(local.core_deploy_outputs.data_mcp_function_url, "")
+          },
+          {
+            name  = "INTELLIGENCE_MCP_URL"
+            value = try(local.core_deploy_outputs.intelligence_mcp_function_url, "")
+          },
+          {
+            name  = "BEDROCK_PROFILE_ARN"
+            value = try(local.core_deploy_outputs.bedrock_orchestrator_profile_arn, "")
+          },
+          {
+            name  = "REDIS_ENDPOINT"
+            value = module.elasticache.configuration_endpoint
+          },
+          {
+            name  = "SQS_QUEUE_URL"
+            value = try(local.core_deploy_outputs.whatsapp_queue_url, "")
+          },
+          {
+            name  = "POSTGRES_HOST"
+            value = module.aurora.endpoint
+          },
+          {
+            name  = "POSTGRES_DB"
+            value = var.database_name
+          }
+        ]
+      )
+
+      # Merge secrets from tfvars with Aurora credentials
+      secrets = concat(
+        service.secrets,
+        [
+          {
+            name       = "POSTGRES_CREDENTIALS"
+            value_from = module.aurora_credentials_secret.secret_arn
+          }
+        ]
+      )
+
+      security_group_ids = [try(local.core_deploy_outputs.orchestrator_security_group_id, "")]
+
+      load_balancer_config = null # No ALB for now
+
+      deployment_configuration         = service.deployment_configuration
+      health_check                     = service.health_check
+      enable_deployment_circuit_breaker = service.enable_deployment_circuit_breaker
+      enable_deployment_rollback       = service.enable_deployment_rollback
+
+      # Optional fields with defaults
+      efs_volumes                    = null
+      mount_points                   = null
+      command                        = null
+      entrypoint                     = null
+      container_definition_overrides = null
+    }
+  ]
+
+  additional_tags = var.additional_tags
 }
 
 # ============================================================================
@@ -387,20 +482,3 @@ module "api_keys_secret" {
     var.additional_tags
   )
 }
-
-# ============================================================================
-# NOTE: core_deploy/ is a separate root module
-# ============================================================================
-# Deploy Lambda MCPs separately:
-#   cd core_deploy
-#   terraform init
-#   terraform plan
-#   terraform apply
-#
-# Requires outputs from this root module:
-#   - VPC ID
-#   - Private subnet IDs
-#   - ElastiCache endpoint
-#   - Aurora endpoint
-#   - API keys secret ARN
-# ============================================================================

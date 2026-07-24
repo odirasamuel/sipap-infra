@@ -1,5 +1,4 @@
 # SIPAP Core Deployment - Lambda MCPs + ECS Orchestrator
-# Following Sentinel's production deployment pattern
 
 # ==============================================================================
 # S3 DATA SOURCES - Track Lambda packages for automatic updates
@@ -197,12 +196,12 @@ module "whatsapp_sqs" {
   env        = var.env
 
   # Queue configuration
-  visibility_timeout_seconds     = 3600   # 60 minutes (longer than longest workflow)
-  dlq_visibility_timeout_seconds = 60     # 1 minute for DLQ
-  max_message_size               = 262144 # 256 KB
+  visibility_timeout_seconds     = 3600    # 60 minutes (longer than longest workflow)
+  dlq_visibility_timeout_seconds = 60      # 1 minute for DLQ
+  max_message_size               = 262144  # 256 KB
   message_retention_seconds      = 1209600 # 14 days
-  receive_wait_time_seconds      = 20     # Long polling (reduces API calls by ~95%)
-  max_receive_count              = 30     # 30 retries before DLQ
+  receive_wait_time_seconds      = 20      # Long polling (reduces API calls by ~95%)
+  max_receive_count              = 30      # 30 retries before DLQ
 
   additional_tags = var.additional_tags
 }
@@ -608,14 +607,117 @@ module "intelligence_mcp_lambda_internal" {
 }
 
 # ==============================================================================
-# TODO: Next Steps
+# ORCHESTRATOR TASK ROLE - IAM role for ECS orchestrator service
 # ==============================================================================
-#
-# 1. ✅ Create IAM role for MCP servers (mcp_servers_role module)
-# 2. ✅ Create Lambda security group for VPC
-# 3. ✅ Create Lambda functions (data-mcp, intelligence-mcp)
-# 4. ✅ Enable Function URLs with AWS_IAM auth
-# 5. ✅ Create SSM parameters with Function URLs
-# 6. Add ECS orchestrator (after Lambda MCPs verified)
-#
+
+module "orchestrator_task_role" {
+  source = "../modules/role"
+
+  role_description   = "IAM task role for SIPAP orchestrator ECS service"
+  stack_name         = var.stack_name
+  env                = var.env
+  aws_region         = var.aws_region
+  stack_tool         = "orchestrator"
+  assume_role_policy = templatefile("${path.module}/../modules/assume_role_policies/ecs_assume_role.json", {})
+
+  # Inline policies for orchestrator
+  inline_policies = [
+    {
+      name = "bedrock-inference-access"
+      policy = templatefile("${path.module}/../modules/policies/bedrock_access_policy.json", {
+        inference_profile_arn = aws_bedrock_inference_profile.orchestrator.arn
+        account_id            = local.account_id
+      })
+    },
+    {
+      name = "lambda-mcp-invoke"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect = "Allow"
+            Action = [
+              "lambda:InvokeFunction",
+              "lambda:InvokeFunctionUrl"
+            ]
+            Resource = [
+              module.data_mcp_lambda_internal.internal_function_arn,
+              module.intelligence_mcp_lambda_internal.internal_function_arn
+            ]
+          }
+        ]
+      })
+    },
+    {
+      name = "sqs-whatsapp-queue-access"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect = "Allow"
+            Action = [
+              "sqs:ReceiveMessage",
+              "sqs:DeleteMessage",
+              "sqs:GetQueueAttributes",
+              "sqs:ChangeMessageVisibility",
+              "sqs:GetQueueUrl"
+            ]
+            Resource = module.whatsapp_sqs.queue_arn
+          }
+        ]
+      })
+    },
+    {
+      name = "secrets-manager-access"
+      policy = templatefile("${path.module}/../modules/policies/secrets_manager_policy.json", {
+        aurora_credentials_secret_arn = local.postgres_credentials_arn
+        api_keys_secret_arn           = "*" # Allow access to all API key secrets
+      })
+    }
+  ]
+
+  additional_tags = var.additional_tags
+}
+
 # ==============================================================================
+# ORCHESTRATOR SECURITY GROUP - Network access for ECS orchestrator
+# ==============================================================================
+
+module "orchestrator_security_group" {
+  source = "../modules/security_groups"
+
+  stack_name = var.stack_name
+  env        = var.env
+  vpc_id     = local.vpc_id
+  aws_region = var.aws_region
+  stack_tool = "orchestrator"
+
+  # Allow all traffic from VPC CIDR
+  ingress_rules = [
+    {
+      description      = "Allow all inbound traffic from VPC CIDR"
+      from_port        = 0
+      to_port          = 0
+      protocol         = "-1"
+      cidr_blocks      = [var.vpc_cidr]
+      ipv6_cidr_blocks = []
+      security_groups  = []
+    }
+  ]
+
+  # Allow all outbound traffic (Lambda Function URLs, Bedrock, Redis, Aurora)
+  egress_rules = [
+    {
+      description      = "Allow all outbound traffic to Lambda MCPs, Bedrock, Redis, Aurora"
+      from_port        = 0
+      to_port          = 0
+      protocol         = "-1"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = []
+    }
+  ]
+
+  additional_tags = merge(var.additional_tags, {
+    Purpose = "orchestrator-ecs-service"
+  })
+}

@@ -91,3 +91,50 @@ variable "additional_tags" {
   type        = map(string)
   default     = {}
 }
+
+# ECS Services Configuration
+variable "ecs_services" {
+  description = "List of ECS services to deploy (e.g., orchestrator)"
+  type = list(object({
+    name          = string
+    image         = string
+    cpu           = number
+    memory        = number
+    desired_count = number
+
+    port_mappings = list(object({
+      container_port = number
+      protocol       = optional(string, "tcp")
+    }))
+
+    environment_variables = optional(list(object({
+      name  = string
+      value = string
+    })), [])
+
+    secrets = optional(list(object({
+      name       = string
+      value_from = string
+    })), [])
+
+    health_check = optional(object({
+      command      = list(string)
+      interval     = optional(number, 30)
+      timeout      = optional(number, 5)
+      retries      = optional(number, 3)
+      start_period = optional(number, 60)
+    }), null)
+
+    deployment_configuration = optional(object({
+      maximum_percent         = optional(number, 200)
+      minimum_healthy_percent = optional(number, 100)
+      }), {
+      maximum_percent         = 200
+      minimum_healthy_percent = 100
+    })
+
+    enable_deployment_circuit_breaker = optional(bool, true)
+    enable_deployment_rollback        = optional(bool, true)
+  }))
+  default = [] # Empty by default, populated in tfvars
+}

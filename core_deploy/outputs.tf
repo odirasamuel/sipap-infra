@@ -183,3 +183,22 @@ output "api_gateway_sqs_role_arn" {
   description = "ARN of the IAM role for API Gateway → SQS integration"
   value       = module.whatsapp_api_gateway.api_gateway_sqs_role_arn
 }
+
+# ==============================================================================
+# Orchestrator Task Role Outputs
+# ==============================================================================
+
+output "orchestrator_task_role_arn" {
+  description = "ARN of the orchestrator ECS task role"
+  value       = module.orchestrator_task_role.role_arn
+}
+
+output "orchestrator_task_role_name" {
+  description = "Name of the orchestrator ECS task role"
+  value       = module.orchestrator_task_role.role_name
+}
+
+output "orchestrator_security_group_id" {
+  description = "Security group ID for orchestrator ECS service"
+  value       = module.orchestrator_security_group.security_group_id
+}

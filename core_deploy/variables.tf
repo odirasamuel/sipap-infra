@@ -25,6 +25,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR block (for security group rules)"
+  type        = string
+  default     = "172.31.0.0/16"
+}
+
 # ==============================================================================
 # MCP Token ARNs (from Secrets Manager)
 # ==============================================================================
