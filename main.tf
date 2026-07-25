@@ -366,6 +366,10 @@ module "ecs_cluster" {
           {
             name  = "POSTGRES_DB"
             value = var.database_name
+          },
+          {
+            name  = "TWILIO_SECRET_ARN"
+            value = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/twilio-credentials-tngBnx"
           }
         ]
       )
