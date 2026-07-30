@@ -108,7 +108,8 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
       variable = "token.actions.githubusercontent.com:sub"
       # Wildcard pattern supports all sipap-* repos in the org
       values = [
-        "repo:${var.github_org}/sipap*"
+        "repo:${var.github_org}/sipap*",
+        "repo:${var.github_org}/ridhatech-website*"
         # "repo:${var.github_org}/sre-sipap*"
       ]
     }
@@ -132,7 +133,24 @@ data "aws_iam_policy_document" "github_actions_permissions" {
 
     resources = [
       aws_s3_bucket.lambda_packages.arn,
-      "${aws_s3_bucket.lambda_packages.arn}/*"
+      "${aws_s3_bucket.lambda_packages.arn}/*",
+      "arn:aws:s3:::ridhatech.com-website",
+      "arn:aws:s3:::ridhatech.com-website/*"
+    ]
+  }
+}
+
+data "aws_iam_policy_document" "github_actions_cloudfront_invalidation" {
+  statement {
+    sid = "CloudFrontInvalidationAccess"
+
+    actions = [
+      "cloudfront:CreateInvalidation",
+      "cloudfront:GetInvalidation"
+    ]
+
+    resources = [
+      "arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/EF4N3I1WMKSL6"
     ]
   }
 }
@@ -152,6 +170,12 @@ resource "aws_iam_policy" "github_actions_s3" {
   name        = "${var.stack_name}-${var.env}-github-actions-s3-policy"
   description = "S3 permissions for Lambda packages bucket"
   policy      = data.aws_iam_policy_document.github_actions_permissions.json
+}
+
+resource "aws_iam_policy" "github_actions_cloudfront_invalidation" {
+  name        = "${var.stack_name}-${var.env}-github-actions-cloudfront-invalidation-policy"
+  description = "CloudFront invalidation permissions for GitHub Actions"
+  policy      = data.aws_iam_policy_document.github_actions_cloudfront_invalidation.json
 }
 
 # # Deployment policy 1
@@ -230,6 +254,11 @@ resource "aws_iam_policy" "github_actions_deploy_5" {
 resource "aws_iam_role_policy_attachment" "github_actions_s3" {
   role       = aws_iam_role.github_actions.name
   policy_arn = aws_iam_policy.github_actions_s3.arn
+}
+
+resource "aws_iam_role_policy_attachment" "github_actions_cloudfront_invalidation" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = aws_iam_policy.github_actions_cloudfront_invalidation.arn
 }
 
 # resource "aws_iam_role_policy_attachment" "github_actions_deploy_1" {
