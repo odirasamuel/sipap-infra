@@ -5,7 +5,7 @@
 # 1. Daily Harvest (Fargate) - daily at 12:00 AM UTC
 # 2. Odds Updater (Lambda) - daily at 9:00 AM UTC (The Odds API - 9 leagues)
 # 3. API-Football Odds Updater (Lambda) - daily at 10:00 AM UTC (API-Football - 900+ competitions)
-# 4. Fixture Updater (Lambda) - hourly
+# 4. Fixture Updater (Lambda) - every 6 hours
 #
 # All jobs use AWS Secrets Manager for API keys and DB credentials
 # Depends on root terraform state for VPC, subnets, security groups, secrets
@@ -315,7 +315,7 @@ resource "aws_lambda_function" "fixture_updater" {
   s3_bucket     = var.lambda_s3_bucket
   s3_key        = "${var.lambda_s3_key_prefix}/fixture_updater.zip"
   function_name = "${var.stack_name}-${var.env}-fixture-updater"
-  description   = "Hourly fixture updater - runs every hour"
+  description   = "Fixture updater - runs every 6 hours"
   role          = module.batch_scraper_lambda_role.role_arn
   handler       = "sipap_batch_scraper.jobs.fixture_updater.lambda_handler"
   runtime       = "python3.12"
@@ -471,8 +471,8 @@ resource "aws_lambda_permission" "odds_updater_eventbridge" {
 # Fixture Updater Schedule (Hourly)
 resource "aws_cloudwatch_event_rule" "fixture_updater" {
   name                = "${var.stack_name}-${var.env}-fixture-updater-schedule"
-  description         = "Fixture updater - runs hourly"
-  schedule_expression = "rate(1 hour)"
+  description         = "Fixture updater - runs every 6 hours"
+  schedule_expression = "rate(6 hours)"
   state               = "ENABLED"
 
   tags = merge(
