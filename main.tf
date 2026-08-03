@@ -352,8 +352,12 @@ module "ecs_cluster" {
             value = try(local.core_deploy_outputs.bedrock_orchestrator_profile_arn, "")
           },
           {
-            name  = "REDIS_ENDPOINT"
+            name  = "REDIS_HOST"
             value = module.elasticache.configuration_endpoint
+          },
+          {
+            name  = "REDIS_PORT"
+            value = tostring(module.elasticache.port)
           },
           {
             name  = "SQS_QUEUE_URL"
