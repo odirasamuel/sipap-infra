@@ -163,10 +163,8 @@ resource "aws_lambda_permission" "allow_orchestrator_internal_url_invoke" {
   statement_id           = "AllowOrchestratorFunctionURLInvoke"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.internal_mcp_server[0].function_name
-  principal              = "sts.amazonaws.com"
-  source_account         = data.aws_caller_identity.current.account_id
+  principal              = var.orchestrator_task_role_arn
   principal_org_id       = null
-  source_arn             = var.orchestrator_task_role_arn
   function_url_auth_type = "AWS_IAM"
 }
 
@@ -191,10 +189,8 @@ resource "aws_lambda_permission" "allow_orchestrator_external_url_invoke" {
   statement_id           = "AllowOrchestratorFunctionURLInvoke"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.external_mcp_server[0].function_name
-  principal              = "sts.amazonaws.com"
-  source_account         = data.aws_caller_identity.current.account_id
+  principal              = var.orchestrator_task_role_arn
   principal_org_id       = null
-  source_arn             = var.orchestrator_task_role_arn
   function_url_auth_type = "AWS_IAM"
 }
 
