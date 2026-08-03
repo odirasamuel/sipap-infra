@@ -474,7 +474,7 @@ module "data_mcp_lambda_internal" {
   # Environment Variables
   internal_lambda_environment_variables = {
     REDIS_ENDPOINT           = local.redis_endpoint
-    REDIS_SSL                = "true"
+    REDIS_SSL                = "false"
     POSTGRES_HOST            = local.postgres_host
     POSTGRES_PORT            = "5432"
     POSTGRES_DB              = local.postgres_db
@@ -562,7 +562,7 @@ module "intelligence_mcp_lambda_internal" {
   # Environment Variables
   internal_lambda_environment_variables = {
     REDIS_ENDPOINT      = local.redis_endpoint
-    REDIS_SSL           = "true"
+    REDIS_SSL           = "false"
     LOG_LEVEL           = "INFO"
     BEDROCK_MODEL_ID    = "anthropic.claude-sonnet-4-5-20250929-v1"
     BEDROCK_PROFILE_ARN = aws_bedrock_inference_profile.intelligence_mcp.arn
