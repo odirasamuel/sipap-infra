@@ -487,8 +487,8 @@ module "data_mcp_lambda_internal" {
   # Lambda Function URL Configuration
   enable_function_url                    = true
   function_url_auth_type                 = "AWS_IAM"
-  enable_orchestrator_invoke_permissions = false # Will enable after orchestrator deployed
-  orchestrator_task_role_arn             = null
+  enable_orchestrator_invoke_permissions = true
+  orchestrator_task_role_arn             = module.orchestrator_task_role.role_arn
 
   # SSM Parameter Store Configuration
   create_ssm_parameter   = true
@@ -573,8 +573,8 @@ module "intelligence_mcp_lambda_internal" {
   # Lambda Function URL Configuration
   enable_function_url                    = true
   function_url_auth_type                 = "AWS_IAM"
-  enable_orchestrator_invoke_permissions = false # Will enable after orchestrator deployed
-  orchestrator_task_role_arn             = null
+  enable_orchestrator_invoke_permissions = true
+  orchestrator_task_role_arn             = module.orchestrator_task_role.role_arn
 
   # SSM Parameter Store Configuration
   create_ssm_parameter   = true
