@@ -235,7 +235,7 @@ module "aurora" {
 
   subnet_ids      = module.subnets.private_subnet_ids
   vpc_id          = module.vpc.vpc_id
-  allowed_cidrs   = [var.vpc_cidr]
+  allowed_cidrs   = [var.vpc_cidr, "99.33.74.242/32"]  # VPC + local IP for integration testing
   additional_tags = var.additional_tags
 }
 
