@@ -1,11 +1,10 @@
 # ============================================================================
 # BATCH SCRAPER EVENTS INFRASTRUCTURE
 # ============================================================================
-# Deploys 4 scheduled jobs:
+# Deploys 3 scheduled jobs:
 # 1. Daily Harvest (Fargate) - daily at 12:00 AM UTC
-# 2. Odds Updater (Lambda) - daily at 9:00 AM UTC (The Odds API - 9 leagues)
-# 3. API-Football Odds Updater (Lambda) - daily at 10:00 AM UTC (API-Football - 900+ competitions)
-# 4. Fixture Updater (Lambda) - every 6 hours
+# 2. API-Football Odds Updater (Lambda) - daily at 10:00 AM UTC (API-Football - 380 competitions)
+# 3. Fixture Updater (Lambda) - every 6 hours
 #
 # All jobs use AWS Secrets Manager for API keys and DB credentials
 # Depends on root terraform state for VPC, subnets, security groups, secrets
@@ -34,11 +33,6 @@ data "terraform_remote_state" "root" {
 # S3 OBJECT DATA SOURCES FOR LAMBDA PACKAGES
 # ============================================================================
 # These data sources track S3 object changes to trigger Lambda updates
-
-data "aws_s3_object" "odds_updater" {
-  bucket = var.lambda_s3_bucket
-  key    = "${var.lambda_s3_key_prefix}/odds_updater.zip"
-}
 
 data "aws_s3_object" "api_football_odds_updater" {
   bucket = var.lambda_s3_bucket
@@ -150,7 +144,6 @@ module "batch_scraper_eventbridge_role" {
     {
       name = "invoke-lambda"
       policy = templatefile("${path.module}/../modules/policies/lambda_invoke_policy.json", {
-        odds_updater_function_arn               = aws_lambda_function.odds_updater.arn
         api_football_odds_updater_function_arn  = aws_lambda_function.api_football_odds_updater.arn
         fixture_updater_function_arn            = aws_lambda_function.fixture_updater.arn
       })
@@ -175,18 +168,6 @@ module "batch_scraper_eventbridge_role" {
 # ============================================================================
 # CLOUDWATCH LOG GROUPS
 # ============================================================================
-
-resource "aws_cloudwatch_log_group" "odds_updater" {
-  name              = "/aws/lambda/${var.stack_name}-${var.env}-odds-updater"
-  retention_in_days = 7
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-odds-updater-logs"
-    },
-    var.additional_tags
-  )
-}
 
 resource "aws_cloudwatch_log_group" "api_football_odds_updater" {
   name              = "/aws/lambda/${var.stack_name}-${var.env}-api-football-odds-updater"
@@ -228,48 +209,7 @@ resource "aws_cloudwatch_log_group" "daily_harvest" {
 # LAMBDA FUNCTIONS
 # ============================================================================
 
-# Odds Updater Lambda (The Odds API - 9 leagues)
-resource "aws_lambda_function" "odds_updater" {
-  s3_bucket     = var.lambda_s3_bucket
-  s3_key        = "${var.lambda_s3_key_prefix}/odds_updater.zip"
-  function_name = "${var.stack_name}-${var.env}-odds-updater"
-  description   = "Daily odds updater (The Odds API) - runs at 9 AM UTC"
-  role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "sipap_batch_scraper.jobs.odds_updater.lambda_handler"
-  runtime       = "python3.12"
-  timeout       = 180
-  memory_size   = 1024
-  architectures = ["arm64"]
-
-  # Track S3 package changes using version_id and etag
-  source_code_hash = base64encode(sha256("${data.aws_s3_object.odds_updater.version_id}-${data.aws_s3_object.odds_updater.etag}"))
-
-  vpc_config {
-    subnet_ids         = data.terraform_remote_state.root.outputs.private_subnet_ids
-    security_group_ids = [data.terraform_remote_state.root.outputs.ecs_tasks_sg_id]
-  }
-
-  environment {
-    variables = {
-      ENVIRONMENT = var.env
-      REDIS_URL   = "redis://${data.terraform_remote_state.root.outputs.elasticache_configuration_endpoint}:6379"
-    }
-  }
-
-  tags = merge(
-    {
-      Name        = "${var.stack_name}-${var.env}-odds-updater"
-      PackageETag = data.aws_s3_object.odds_updater.etag
-    },
-    var.additional_tags
-  )
-
-  depends_on = [
-    aws_cloudwatch_log_group.odds_updater
-  ]
-}
-
-# API-Football Odds Updater Lambda (API-Football - 900+ competitions)
+# API-Football Odds Updater Lambda (API-Football - 380 competitions)
 resource "aws_lambda_function" "api_football_odds_updater" {
   s3_bucket     = var.lambda_s3_bucket
   s3_key        = "${var.lambda_s3_key_prefix}/api_football_odds_updater.zip"
@@ -439,36 +379,7 @@ resource "aws_cloudwatch_event_target" "daily_harvest" {
   }
 }
 
-# Odds Updater Schedule (9:00 AM UTC daily)
-resource "aws_cloudwatch_event_rule" "odds_updater" {
-  name                = "${var.stack_name}-${var.env}-odds-updater-schedule"
-  description         = "Odds updater - runs daily at 9 AM UTC"
-  schedule_expression = "cron(0 9 * * ? *)"
-  state               = "ENABLED"
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-odds-updater-schedule"
-    },
-    var.additional_tags
-  )
-}
-
-resource "aws_cloudwatch_event_target" "odds_updater" {
-  rule      = aws_cloudwatch_event_rule.odds_updater.name
-  target_id = "OddsUpdaterLambda"
-  arn       = aws_lambda_function.odds_updater.arn
-}
-
-resource "aws_lambda_permission" "odds_updater_eventbridge" {
-  statement_id  = "AllowEventBridgeInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.odds_updater.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.odds_updater.arn
-}
-
-# Fixture Updater Schedule (Hourly)
+# Fixture Updater Schedule (Every 6 hours)
 resource "aws_cloudwatch_event_rule" "fixture_updater" {
   name                = "${var.stack_name}-${var.env}-fixture-updater-schedule"
   description         = "Fixture updater - runs every 6 hours"
@@ -500,7 +411,7 @@ resource "aws_lambda_permission" "fixture_updater_eventbridge" {
 # API-Football Odds Updater Schedule (10:00 AM UTC daily)
 resource "aws_cloudwatch_event_rule" "api_football_odds_updater" {
   name                = "${var.stack_name}-${var.env}-api-football-odds-updater-schedule"
-  description         = "API-Football odds updater - runs daily at 10 AM UTC (1 hour after The Odds API updater)"
+  description         = "API-Football odds updater - runs daily at 10 AM UTC"
   schedule_expression = "cron(0 10 * * ? *)"
   state               = "ENABLED"
 

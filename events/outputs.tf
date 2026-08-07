@@ -19,16 +19,6 @@ output "batch_scraper_eventbridge_role_arn" {
 }
 
 # Lambda Function Outputs
-output "odds_updater_function_name" {
-  description = "Odds updater Lambda function name"
-  value       = aws_lambda_function.odds_updater.function_name
-}
-
-output "odds_updater_function_arn" {
-  description = "Odds updater Lambda function ARN"
-  value       = aws_lambda_function.odds_updater.arn
-}
-
 output "api_football_odds_updater_function_name" {
   description = "API-Football odds updater Lambda function name"
   value       = aws_lambda_function.api_football_odds_updater.function_name
@@ -66,11 +56,6 @@ output "daily_harvest_schedule_arn" {
   value       = aws_cloudwatch_event_rule.daily_harvest.arn
 }
 
-output "odds_updater_schedule_arn" {
-  description = "Odds updater EventBridge schedule ARN"
-  value       = aws_cloudwatch_event_rule.odds_updater.arn
-}
-
 output "api_football_odds_updater_schedule_arn" {
   description = "API-Football odds updater EventBridge schedule ARN"
   value       = aws_cloudwatch_event_rule.api_football_odds_updater.arn
@@ -82,11 +67,6 @@ output "fixture_updater_schedule_arn" {
 }
 
 # CloudWatch Log Group Outputs
-output "odds_updater_log_group_name" {
-  description = "Odds updater CloudWatch log group name"
-  value       = aws_cloudwatch_log_group.odds_updater.name
-}
-
 output "api_football_odds_updater_log_group_name" {
   description = "API-Football odds updater CloudWatch log group name"
   value       = aws_cloudwatch_log_group.api_football_odds_updater.name
