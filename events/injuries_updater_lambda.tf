@@ -31,7 +31,7 @@ resource "aws_lambda_function" "injuries_updater" {
   function_name = "${var.stack_name}-${var.env}-injuries-updater"
   description   = "Injuries updater job - updates player injuries from API-Football"
   role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "lambda_handler.lambda_handler"
+  handler       = "sipap_batch_scraper.jobs.injuries_updater.lambda_handler"
   runtime       = "python3.12"
   timeout       = 180  # 3 minutes
   memory_size   = 512

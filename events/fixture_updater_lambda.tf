@@ -31,7 +31,7 @@ resource "aws_lambda_function" "fixture_updater" {
   function_name = "${var.stack_name}-${var.env}-fixture-updater"
   description   = "Fixture updater job - updates fixture details and statuses from API-Football"
   role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "lambda_handler.lambda_handler"
+  handler       = "sipap_batch_scraper.jobs.fixture_updater.lambda_handler"
   runtime       = "python3.12"
   timeout       = 240  # 4 minutes
   memory_size   = 512

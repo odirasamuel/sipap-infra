@@ -30,21 +30,6 @@ data "terraform_remote_state" "root" {
 }
 
 # ============================================================================
-# S3 OBJECT DATA SOURCES FOR LAMBDA PACKAGES
-# ============================================================================
-# These data sources track S3 object changes to trigger Lambda updates
-
-data "aws_s3_object" "api_football_odds_updater" {
-  bucket = var.lambda_s3_bucket
-  key    = "${var.lambda_s3_key_prefix}/api_football_odds_updater.zip"
-}
-
-data "aws_s3_object" "fixture_updater" {
-  bucket = var.lambda_s3_bucket
-  key    = "${var.lambda_s3_key_prefix}/fixture_updater.zip"
-}
-
-# ============================================================================
 # LOCALS FOR POLICY CHANGE TRACKING
 # ============================================================================
 # Compute hashes of policy files to detect changes
@@ -166,133 +151,22 @@ module "batch_scraper_eventbridge_role" {
 }
 
 # ============================================================================
-# CLOUDWATCH LOG GROUPS
+# NOTE: Lambda functions are now defined in dedicated *_lambda.tf files
 # ============================================================================
-
-resource "aws_cloudwatch_log_group" "api_football_odds_updater" {
-  name              = "/aws/lambda/${var.stack_name}-${var.env}-api-football-odds-updater"
-  retention_in_days = 7
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-api-football-odds-updater-logs"
-    },
-    var.additional_tags
-  )
-}
-
-resource "aws_cloudwatch_log_group" "fixture_updater" {
-  name              = "/aws/lambda/${var.stack_name}-${var.env}-fixture-updater"
-  retention_in_days = 7
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-fixture-updater-logs"
-    },
-    var.additional_tags
-  )
-}
-
-resource "aws_cloudwatch_log_group" "daily_harvest" {
-  name              = "/ecs/${var.stack_name}-${var.env}-daily-harvest"
-  retention_in_days = 7
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-daily-harvest-logs"
-    },
-    var.additional_tags
-  )
-}
+# - daily_harvest_lambda.tf
+# - standings_updater_lambda.tf
+# - team_stats_updater_lambda.tf
+# - teams_metadata_sync_lambda.tf
+# - injuries_updater_lambda.tf
+# - lineups_fetcher_lambda.tf
+# - api_football_odds_updater_lambda.tf
+# - fixture_updater_lambda.tf
+# - h2h_fetcher_lambda.tf
+# - db_query_lambda.tf
+# - integration_test_lambda.tf
 
 # ============================================================================
-# LAMBDA FUNCTIONS
-# ============================================================================
-
-# API-Football Odds Updater Lambda (API-Football - 380 competitions)
-resource "aws_lambda_function" "api_football_odds_updater" {
-  s3_bucket     = var.lambda_s3_bucket
-  s3_key        = "${var.lambda_s3_key_prefix}/api_football_odds_updater.zip"
-  function_name = "${var.stack_name}-${var.env}-api-football-odds-updater"
-  description   = "Daily API-Football odds updater - runs at 10 AM UTC (900+ competitions, prioritizes next 72 hours)"
-  role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "sipap_batch_scraper.jobs.api_football_odds_updater.lambda_handler"
-  runtime       = "python3.12"
-  timeout       = 300
-  memory_size   = 1024
-  architectures = ["arm64"]
-
-  # Track S3 package changes using version_id and etag
-  source_code_hash = base64encode(sha256("${data.aws_s3_object.api_football_odds_updater.version_id}-${data.aws_s3_object.api_football_odds_updater.etag}"))
-
-  vpc_config {
-    subnet_ids         = data.terraform_remote_state.root.outputs.private_subnet_ids
-    security_group_ids = [data.terraform_remote_state.root.outputs.ecs_tasks_sg_id]
-  }
-
-  environment {
-    variables = {
-      ENVIRONMENT = var.env
-      REDIS_URL   = "redis://${data.terraform_remote_state.root.outputs.elasticache_configuration_endpoint}:6379"
-    }
-  }
-
-  tags = merge(
-    {
-      Name        = "${var.stack_name}-${var.env}-api-football-odds-updater"
-      PackageETag = data.aws_s3_object.api_football_odds_updater.etag
-    },
-    var.additional_tags
-  )
-
-  depends_on = [
-    aws_cloudwatch_log_group.api_football_odds_updater
-  ]
-}
-
-# Fixture Updater Lambda
-resource "aws_lambda_function" "fixture_updater" {
-  s3_bucket     = var.lambda_s3_bucket
-  s3_key        = "${var.lambda_s3_key_prefix}/fixture_updater.zip"
-  function_name = "${var.stack_name}-${var.env}-fixture-updater"
-  description   = "Fixture updater - runs every 6 hours"
-  role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "sipap_batch_scraper.jobs.fixture_updater.lambda_handler"
-  runtime       = "python3.12"
-  timeout       = 180
-  memory_size   = 1024
-  architectures = ["arm64"]
-
-  # Track S3 package changes using version_id and etag
-  source_code_hash = base64encode(sha256("${data.aws_s3_object.fixture_updater.version_id}-${data.aws_s3_object.fixture_updater.etag}"))
-
-  vpc_config {
-    subnet_ids         = data.terraform_remote_state.root.outputs.private_subnet_ids
-    security_group_ids = [data.terraform_remote_state.root.outputs.ecs_tasks_sg_id]
-  }
-
-  environment {
-    variables = {
-      ENVIRONMENT = var.env
-      REDIS_URL   = "redis://${data.terraform_remote_state.root.outputs.elasticache_configuration_endpoint}:6379"
-    }
-  }
-
-  tags = merge(
-    {
-      Name        = "${var.stack_name}-${var.env}-fixture-updater"
-      PackageETag = data.aws_s3_object.fixture_updater.etag
-    },
-    var.additional_tags
-  )
-
-  depends_on = [
-    aws_cloudwatch_log_group.fixture_updater
-  ]
-}
-
-# ============================================================================
-# ECS TASK DEFINITION
+# ECS TASK DEFINITION (Daily Harvest Fargate)
 # ============================================================================
 
 resource "aws_ecs_task_definition" "daily_harvest" {

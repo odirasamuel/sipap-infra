@@ -31,7 +31,7 @@ resource "aws_lambda_function" "team_stats_updater" {
   function_name = "${var.stack_name}-${var.env}-team-stats-updater"
   description   = "Team stats updater job - updates team statistics from API-Football"
   role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "lambda_handler.lambda_handler"
+  handler       = "sipap_batch_scraper.jobs.team_stats_updater.lambda_handler"
   runtime       = "python3.12"
   timeout       = 300  # 5 minutes
   memory_size   = 512

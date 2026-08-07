@@ -31,7 +31,7 @@ resource "aws_lambda_function" "h2h_fetcher" {
   function_name = "${var.stack_name}-${var.env}-h2h-fetcher"
   description   = "H2H fetcher job - fetches head-to-head stats from API-Football (on-demand)"
   role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "lambda_handler.lambda_handler"
+  handler       = "sipap_batch_scraper.jobs.h2h_fetcher.lambda_handler"
   runtime       = "python3.12"
   timeout       = 180  # 3 minutes
   memory_size   = 512

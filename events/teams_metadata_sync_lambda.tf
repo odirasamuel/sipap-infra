@@ -31,7 +31,7 @@ resource "aws_lambda_function" "teams_metadata_sync" {
   function_name = "${var.stack_name}-${var.env}-teams-metadata-sync"
   description   = "Teams metadata sync job - syncs team logos, venues from API-Football"
   role          = module.batch_scraper_lambda_role.role_arn
-  handler       = "lambda_handler.lambda_handler"
+  handler       = "sipap_batch_scraper.jobs.teams_metadata_sync.lambda_handler"
   runtime       = "python3.12"
   timeout       = 300  # 5 minutes
   memory_size   = 512
