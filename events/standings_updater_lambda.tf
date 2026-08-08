@@ -33,7 +33,7 @@ resource "aws_lambda_function" "standings_updater" {
   role          = module.batch_scraper_lambda_role.role_arn
   handler       = "sipap_batch_scraper.jobs.standings_updater.lambda_handler"
   runtime       = "python3.12"
-  timeout       = 300  # 5 minutes
+  timeout       = 300  # 5 minutes (enough for 289 leagues × 1 sec/batch = ~145 seconds)
   memory_size   = 512
   architectures = ["arm64"]
 
