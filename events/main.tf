@@ -141,16 +141,7 @@ module "batch_scraper_eventbridge_role" {
       name = "invoke-lambda"
       policy = templatefile("${path.module}/../modules/policies/lambda_invoke_policy.json", {
         api_football_odds_updater_function_arn  = aws_lambda_function.api_football_odds_updater.arn
-        fixture_updater_function_arn            = aws_lambda_function.fixture_updater.arn
-      })
-    },
-    {
-      name = "run-ecs-task"
-      policy = templatefile("${path.module}/../modules/policies/ecs_run_task_policy.json", {
-        daily_harvest_task_definition_arn = aws_ecs_task_definition.daily_harvest.arn
-        ecs_cluster_arn                   = data.terraform_remote_state.root.outputs.ecs_cluster_arn
-        ecs_task_execution_role_arn       = data.terraform_remote_state.root.outputs.ecs_task_execution_role_arn
-        ecs_task_role_arn                 = module.batch_scraper_ecs_task_role.role_arn
+        # fixture_updater removed - replaced by fixture_manager
       })
     }
   ]
@@ -180,118 +171,9 @@ module "batch_scraper_eventbridge_role" {
 # ECS TASK DEFINITION (Daily Harvest Fargate)
 # ============================================================================
 
-resource "aws_ecs_task_definition" "daily_harvest" {
-  family                   = "${var.stack_name}-${var.env}-daily-harvest"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
-  execution_role_arn       = data.terraform_remote_state.root.outputs.ecs_task_execution_role_arn
-  task_role_arn            = module.batch_scraper_ecs_task_role.role_arn
-
-  container_definitions = jsonencode([
-    {
-      name      = "daily-harvest"
-      image     = "${lookup(data.terraform_remote_state.root.outputs.ecr_repository_urls, "batch-scraper", "")}:latest"
-      essential = true
-      command   = ["python", "-m", "sipap_batch_scraper.jobs.daily_harvest"]
-
-      environment = [
-        {
-          name  = "ENVIRONMENT"
-          value = var.env
-        },
-        {
-          name  = "REDIS_URL"
-          value = "redis://${data.terraform_remote_state.root.outputs.elasticache_configuration_endpoint}:6379"
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.daily_harvest.name
-          "awslogs-region"        = data.aws_region.current.name
-          "awslogs-stream-prefix" = "ecs"
-        }
-      }
-    }
-  ])
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-daily-harvest"
-    },
-    var.additional_tags
-  )
-}
-
 # ============================================================================
 # EVENTBRIDGE SCHEDULES
 # ============================================================================
-
-# Daily Harvest Schedule (12:00 AM UTC)
-resource "aws_cloudwatch_event_rule" "daily_harvest" {
-  name                = "${var.stack_name}-${var.env}-daily-harvest-schedule"
-  description         = "Daily harvest - runs at 12:00 AM UTC"
-  schedule_expression = "cron(0 0 * * ? *)"
-  state               = "ENABLED"
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-daily-harvest-schedule"
-    },
-    var.additional_tags
-  )
-}
-
-resource "aws_cloudwatch_event_target" "daily_harvest" {
-  rule      = aws_cloudwatch_event_rule.daily_harvest.name
-  target_id = "DailyHarvestFargate"
-  arn       = data.terraform_remote_state.root.outputs.ecs_cluster_arn
-  role_arn  = module.batch_scraper_eventbridge_role.role_arn
-
-  ecs_target {
-    task_count          = 1
-    task_definition_arn = aws_ecs_task_definition.daily_harvest.arn
-    launch_type         = "FARGATE"
-
-    network_configuration {
-      subnets          = data.terraform_remote_state.root.outputs.private_subnet_ids
-      security_groups  = [data.terraform_remote_state.root.outputs.ecs_tasks_sg_id]
-      assign_public_ip = false
-    }
-  }
-}
-
-# Fixture Updater Schedule (Every 6 hours)
-resource "aws_cloudwatch_event_rule" "fixture_updater" {
-  name                = "${var.stack_name}-${var.env}-fixture-updater-schedule"
-  description         = "Fixture updater - runs every 6 hours"
-  schedule_expression = "rate(6 hours)"
-  state               = "ENABLED"
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-fixture-updater-schedule"
-    },
-    var.additional_tags
-  )
-}
-
-resource "aws_cloudwatch_event_target" "fixture_updater" {
-  rule      = aws_cloudwatch_event_rule.fixture_updater.name
-  target_id = "FixtureUpdaterLambda"
-  arn       = aws_lambda_function.fixture_updater.arn
-}
-
-resource "aws_lambda_permission" "fixture_updater_eventbridge" {
-  statement_id  = "AllowEventBridgeInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.fixture_updater.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.fixture_updater.arn
-}
 
 # API-Football Odds Updater Schedule (10:00 AM UTC daily)
 resource "aws_cloudwatch_event_rule" "api_football_odds_updater" {

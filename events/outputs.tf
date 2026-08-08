@@ -26,13 +26,4 @@ output "batch_scraper_eventbridge_role_arn" {
 # - <job>_function_arn
 # - <job>_schedule_rule (if scheduled)
 
-# ECS Task Definition Outputs (Daily Harvest Fargate)
-output "daily_harvest_task_definition_arn" {
-  description = "Daily harvest ECS task definition ARN"
-  value       = aws_ecs_task_definition.daily_harvest.arn
-}
-
-output "daily_harvest_task_definition_family" {
-  description = "Daily harvest ECS task definition family"
-  value       = aws_ecs_task_definition.daily_harvest.family
-}
+# Note: daily_harvest and fixture_updater removed - replaced by fixture_manager
