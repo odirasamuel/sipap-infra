@@ -72,7 +72,7 @@ resource "aws_lambda_function" "fixture_manager" {
       PackageETag = data.aws_s3_object.fixture_manager.etag
       Purpose     = "batch-fixture-score-management"
       Schedule    = "every-6-hours-utc"
-      Replaces    = "daily-harvest,fixture-updater"
+      Replaces    = "daily-harvest+fixture-updater"
     },
     var.additional_tags
   )
