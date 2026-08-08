@@ -64,7 +64,7 @@ resource "aws_lambda_function" "lineups_fetcher" {
       Name        = "${var.stack_name}-${var.env}-lineups-fetcher"
       PackageETag = data.aws_s3_object.lineups_fetcher.etag
       Purpose     = "batch-lineups-fetch"
-      Schedule    = "hourly"
+      Schedule    = "every-30-minutes"
     },
     var.additional_tags
   )
@@ -74,11 +74,11 @@ resource "aws_lambda_function" "lineups_fetcher" {
   ]
 }
 
-# EventBridge Schedule: Hourly at minute 0
+# EventBridge Schedule: Every 30 minutes (increased frequency for lineup confirmations)
 resource "aws_cloudwatch_event_rule" "lineups_fetcher_schedule" {
   name                = "${var.stack_name}-${var.env}-lineups-fetcher-schedule"
-  description         = "Trigger lineups fetcher job every hour"
-  schedule_expression = "cron(0 * * * ? *)"
+  description         = "Trigger lineups fetcher job every 30 minutes for timely lineup confirmations"
+  schedule_expression = "cron(0,30 * * * ? *)"
 
   tags = merge(
     {

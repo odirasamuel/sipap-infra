@@ -64,7 +64,7 @@ resource "aws_lambda_function" "api_football_odds_updater" {
       Name        = "${var.stack_name}-${var.env}-api-football-odds-updater"
       PackageETag = data.aws_s3_object.api_football_odds_updater.etag
       Purpose     = "batch-odds-update"
-      Schedule    = "every-3-hours"
+      Schedule    = "hourly"
     },
     var.additional_tags
   )
@@ -74,11 +74,11 @@ resource "aws_lambda_function" "api_football_odds_updater" {
   ]
 }
 
-# EventBridge Schedule: Every 3 hours
+# EventBridge Schedule: Every 1 hour (increased frequency for real-time accuracy)
 resource "aws_cloudwatch_event_rule" "api_football_odds_updater_schedule" {
   name                = "${var.stack_name}-${var.env}-api-football-odds-updater-schedule"
-  description         = "Trigger API-Football odds updater job every 3 hours"
-  schedule_expression = "cron(0 */3 * * ? *)"
+  description         = "Trigger API-Football odds updater job every hour for real-time accuracy"
+  schedule_expression = "cron(0 * * * ? *)"
 
   tags = merge(
     {

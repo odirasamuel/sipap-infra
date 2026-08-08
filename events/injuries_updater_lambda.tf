@@ -64,7 +64,7 @@ resource "aws_lambda_function" "injuries_updater" {
       Name        = "${var.stack_name}-${var.env}-injuries-updater"
       PackageETag = data.aws_s3_object.injuries_updater.etag
       Purpose     = "batch-injuries-update"
-      Schedule    = "hourly"
+      Schedule    = "every-30-minutes"
     },
     var.additional_tags
   )
@@ -74,11 +74,11 @@ resource "aws_lambda_function" "injuries_updater" {
   ]
 }
 
-# EventBridge Schedule: Hourly at minute 0
+# EventBridge Schedule: Every 30 minutes (increased frequency for breaking injury news)
 resource "aws_cloudwatch_event_rule" "injuries_updater_schedule" {
   name                = "${var.stack_name}-${var.env}-injuries-updater-schedule"
-  description         = "Trigger injuries updater job every hour"
-  schedule_expression = "cron(0 * * * ? *)"
+  description         = "Trigger injuries updater job every 30 minutes for timely injury updates"
+  schedule_expression = "cron(0,30 * * * ? *)"
 
   tags = merge(
     {

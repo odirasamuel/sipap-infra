@@ -1,9 +1,9 @@
 # ============================================================================
-# H2H FETCHER LAMBDA (ON-DEMAND BATCH JOB)
+# H2H FETCHER LAMBDA (SCHEDULED BATCH JOB)
 # ============================================================================
 # Fetches head-to-head stats from API-Football
-# Trigger: On-demand invocation (no schedule)
-# Coverage: Specific team pairs as requested
+# Schedule: Daily at 3:00 AM UTC
+# Coverage: All upcoming fixtures (fetches H2H for match pairs)
 
 # S3 Object Data Source for h2h_fetcher package
 data "aws_s3_object" "h2h_fetcher" {
@@ -29,11 +29,11 @@ resource "aws_lambda_function" "h2h_fetcher" {
   s3_bucket     = var.lambda_s3_bucket
   s3_key        = "${var.lambda_s3_key_prefix}/h2h_fetcher.zip"
   function_name = "${var.stack_name}-${var.env}-h2h-fetcher"
-  description   = "H2H fetcher job - fetches head-to-head stats from API-Football (on-demand)"
+  description   = "H2H fetcher job - fetches head-to-head stats from API-Football for upcoming fixtures"
   role          = module.batch_scraper_lambda_role.role_arn
   handler       = "sipap_batch_scraper.jobs.h2h_fetcher.lambda_handler"
   runtime       = "python3.12"
-  timeout       = 180  # 3 minutes
+  timeout       = 300  # 5 minutes (processes H2H for all upcoming fixtures)
   memory_size   = 512
   architectures = ["arm64"]
 
@@ -64,7 +64,7 @@ resource "aws_lambda_function" "h2h_fetcher" {
       Name        = "${var.stack_name}-${var.env}-h2h-fetcher"
       PackageETag = data.aws_s3_object.h2h_fetcher.etag
       Purpose     = "batch-h2h-fetch"
-      Schedule    = "on-demand"
+      Schedule    = "daily-03:00-utc"
     },
     var.additional_tags
   )
@@ -72,6 +72,36 @@ resource "aws_lambda_function" "h2h_fetcher" {
   depends_on = [
     aws_cloudwatch_log_group.h2h_fetcher
   ]
+}
+
+# EventBridge Schedule: Daily at 3:00 AM UTC
+resource "aws_cloudwatch_event_rule" "h2h_fetcher_schedule" {
+  name                = "${var.stack_name}-${var.env}-h2h-fetcher-schedule"
+  description         = "Trigger H2H fetcher job daily at 3:00 AM UTC"
+  schedule_expression = "cron(0 3 * * ? *)"
+
+  tags = merge(
+    {
+      Name = "${var.stack_name}-${var.env}-h2h-fetcher-schedule"
+    },
+    var.additional_tags
+  )
+}
+
+# EventBridge Target
+resource "aws_cloudwatch_event_target" "h2h_fetcher_target" {
+  rule      = aws_cloudwatch_event_rule.h2h_fetcher_schedule.name
+  target_id = "H2HFetcherLambda"
+  arn       = aws_lambda_function.h2h_fetcher.arn
+}
+
+# Lambda Permission for EventBridge
+resource "aws_lambda_permission" "allow_eventbridge_h2h_fetcher" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.h2h_fetcher.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.h2h_fetcher_schedule.arn
 }
 
 # Outputs
@@ -83,4 +113,9 @@ output "h2h_fetcher_function_name" {
 output "h2h_fetcher_function_arn" {
   description = "H2H fetcher Lambda function ARN"
   value       = aws_lambda_function.h2h_fetcher.arn
+}
+
+output "h2h_fetcher_schedule_rule" {
+  description = "H2H fetcher EventBridge schedule rule name"
+  value       = aws_cloudwatch_event_rule.h2h_fetcher_schedule.name
 }
