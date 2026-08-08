@@ -35,10 +35,11 @@ data "terraform_remote_state" "root" {
 # Compute hashes of policy files to detect changes
 
 locals {
-  secrets_manager_policy_hash = filesha256("${path.module}/../modules/policies/secrets_manager_policy.json")
-  cloudwatch_logs_policy_hash = filesha256("${path.module}/../modules/policies/cloudwatch_logs_policy.json")
-  lambda_invoke_policy_hash   = filesha256("${path.module}/../modules/policies/lambda_invoke_policy.json")
-  ecs_run_task_policy_hash    = filesha256("${path.module}/../modules/policies/ecs_run_task_policy.json")
+  secrets_manager_policy_hash    = filesha256("${path.module}/../modules/policies/secrets_manager_policy.json")
+  cloudwatch_logs_policy_hash    = filesha256("${path.module}/../modules/policies/cloudwatch_logs_policy.json")
+  lambda_invoke_policy_hash      = filesha256("${path.module}/../modules/policies/lambda_invoke_policy.json")
+  ecs_run_task_policy_hash       = filesha256("${path.module}/../modules/policies/ecs_run_task_policy.json")
+  dynamodb_backfill_policy_hash  = filesha256("${path.module}/../modules/policies/dynamodb_backfill_policy.json")
 }
 
 # ============================================================================
@@ -77,12 +78,22 @@ module "batch_scraper_lambda_role" {
         stack_name = var.stack_name
         env        = var.env
       })
+    },
+    {
+      name = "dynamodb-backfill-progress"
+      policy = templatefile("${path.module}/../modules/policies/dynamodb_backfill_policy.json", {
+        aws_region = data.aws_region.current.name
+        account_id = data.aws_caller_identity.current.account_id
+        stack_name = var.stack_name
+        env        = var.env
+      })
     }
   ]
 
   additional_tags = merge(var.additional_tags, {
     SecretsManagerPolicyHash = local.secrets_manager_policy_hash
     CloudWatchLogsPolicyHash = local.cloudwatch_logs_policy_hash
+    DynamoDBPolicyHash       = local.dynamodb_backfill_policy_hash
   })
 }
 

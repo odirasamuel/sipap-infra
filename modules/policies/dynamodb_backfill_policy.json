@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DynamoDBBackfillProgressAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${aws_region}:${account_id}:table/${stack_name}-${env}-backfill-progress",
+        "arn:aws:dynamodb:${aws_region}:${account_id}:table/${stack_name}-${env}-backfill-progress/index/*"
+      ]
+    }
+  ]
+}
