@@ -80,6 +80,7 @@ locals {
   postgres_host            = data.terraform_remote_state.base.outputs.aurora_cluster_endpoint
   postgres_db              = data.terraform_remote_state.base.outputs.aurora_database_name
   postgres_credentials_arn = data.terraform_remote_state.base.outputs.aurora_credentials_secret_arn
+  api_keys_secret_arn      = data.terraform_remote_state.base.outputs.api_keys_secret_arn
 
   # Policy file hashes for change tracking
   policy_file_hashes = {
@@ -566,6 +567,7 @@ module "intelligence_mcp_lambda_internal" {
     LOG_LEVEL           = "INFO"
     BEDROCK_MODEL_ID    = "anthropic.claude-sonnet-4-5-20250929-v1"
     BEDROCK_PROFILE_ARN = aws_bedrock_inference_profile.intelligence_mcp.arn
+    API_KEYS_SECRET_ARN = local.api_keys_secret_arn
   }
 
   internal_lambda_description = "SIPAP Intelligence MCP Server - News aggregation and sentiment analysis"
