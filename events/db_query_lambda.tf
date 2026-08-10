@@ -32,7 +32,7 @@ resource "aws_lambda_function" "db_query" {
   role          = module.batch_scraper_lambda_role.role_arn
   handler       = "sipap_batch_scraper.jobs.db_query.lambda_handler"
   runtime       = "python3.12"
-  timeout       = 60
+  timeout       = 120  # Increased from 60s for complex queries
   memory_size   = 512
   architectures = ["arm64"]
 
@@ -46,8 +46,14 @@ resource "aws_lambda_function" "db_query" {
 
   environment {
     variables = {
-      ENVIRONMENT = var.env
-      REDIS_URL   = "redis://${data.terraform_remote_state.root.outputs.elasticache_configuration_endpoint}:6379"
+      ENVIRONMENT           = var.env
+      REDIS_URL             = "redis://${data.terraform_remote_state.root.outputs.elasticache_configuration_endpoint}:6379"
+      # Aurora database credentials (required for db_query utility)
+      AURORA_SECRET_ARN     = data.terraform_remote_state.root.outputs.aurora_credentials_secret_arn
+      AURORA_HOST           = data.terraform_remote_state.root.outputs.aurora_cluster_endpoint
+      AURORA_PORT           = "5432"
+      AURORA_DATABASE       = "sipap_dev"
+      AURORA_USER           = "sipap_admin"
     }
   }
 
