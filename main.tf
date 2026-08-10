@@ -478,12 +478,14 @@ module "api_keys_secret" {
   source = "./modules/create_secret"
 
   secret_name        = "${var.stack_name}/${var.env}/api-keys"
-  secret_description = "API keys for SIPAP (API-Football only)"
+  secret_description = "API keys for SIPAP (API-Football, OpenWeather, NewsAPI)"
   replica_region     = null
 
   # Empty secret - will be populated manually via AWS CLI with profile "odiraaws"
   secret_string = jsonencode({
-    API_FOOTBALL_KEY = ""
+    API_FOOTBALL_KEY     = ""
+    OPENWEATHER_API_KEY  = ""
+    NEWS_API_KEY         = ""
   })
 
   additional_tags = merge(

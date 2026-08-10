@@ -22,4 +22,10 @@ resource "aws_secretsmanager_secret" "secret" {
 resource "aws_secretsmanager_secret_version" "secret_version" {
   secret_id     = aws_secretsmanager_secret.secret.id
   secret_string = var.secret_string
+
+  # Prevent Terraform from overwriting manually populated secrets
+  # After initial creation, secrets should be managed via AWS CLI or Console
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
