@@ -236,6 +236,7 @@ module "aurora" {
   subnet_ids      = module.subnets.private_subnet_ids
   vpc_id          = module.vpc.vpc_id
   allowed_cidrs   = [var.vpc_cidr, "99.33.74.242/32"]  # VPC + local IP for integration testing
+  lambda_security_group_ids = [module.ecs_tasks_sg.security_group_id]  # Allow Lambda functions to access RDS
   additional_tags = var.additional_tags
 }
 

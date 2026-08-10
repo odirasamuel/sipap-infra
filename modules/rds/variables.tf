@@ -45,6 +45,12 @@ variable "allowed_cidrs" {
   type        = list(string)
 }
 
+variable "lambda_security_group_ids" {
+  description = "List of Lambda security group IDs allowed to access RDS"
+  type        = list(string)
+  default     = []
+}
+
 variable "use_serverless" {
   description = "Use Aurora Serverless v2 (true) or standard RDS instance (false)"
   type        = bool
