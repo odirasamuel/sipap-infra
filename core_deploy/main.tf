@@ -197,7 +197,7 @@ module "whatsapp_sqs" {
   env        = var.env
 
   # Queue configuration
-  visibility_timeout_seconds     = 3600    # 60 minutes (longer than longest workflow)
+  visibility_timeout_seconds     = 60      # 1 minute (workflows complete in <10s, allows fast retries)
   dlq_visibility_timeout_seconds = 60      # 1 minute for DLQ
   max_message_size               = 262144  # 256 KB
   message_retention_seconds      = 1209600 # 14 days
