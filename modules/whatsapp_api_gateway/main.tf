@@ -68,11 +68,12 @@ resource "aws_api_gateway_integration" "sqs" {
   }
 
   # VTL template: Transform Twilio webhook → SQS SendMessage params
-  # MessageGroupId = phone number from $.From (URL-encoded for SQS alphanumeric requirement)
+  # MessageGroupId = phone number from From field (extracted from form data, already URL-encoded)
   # MessageDeduplicationId = request ID (prevents duplicates)
+  # MessageBody = raw Twilio form data (orchestrator will parse it)
   request_templates = {
-    "application/json"                  = "Action=SendMessage&QueueUrl=${var.sqs_queue_url}&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$util.urlEncode($input.path('$.From'))&MessageDeduplicationId=$context.requestId"
-    "application/x-www-form-urlencoded" = "Action=SendMessage&QueueUrl=${var.sqs_queue_url}&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$util.urlEncode($input.params('From'))&MessageDeduplicationId=$context.requestId"
+    "application/json" = "Action=SendMessage&QueueUrl=${var.sqs_queue_url}&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$util.urlEncode($input.path('$.From'))&MessageDeduplicationId=$context.requestId"
+    "application/x-www-form-urlencoded" = "#set($formData = $input.body.split(\"&\"))#set($fromValue = \"\")#set($bodyValue = \"\")#foreach($param in $formData)#if($param.startsWith(\"From=\"))#set($fromValue = $param.substring(5))#end#if($param.startsWith(\"Body=\"))#set($bodyValue = $param.substring(5))#end#end##\nAction=SendMessage&QueueUrl=${var.sqs_queue_url}&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$fromValue&MessageDeduplicationId=$context.requestId"
   }
 
   timeout_milliseconds = 29000
