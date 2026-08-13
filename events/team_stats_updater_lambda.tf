@@ -33,7 +33,7 @@ resource "aws_lambda_function" "team_stats_updater" {
   role          = module.batch_scraper_lambda_role.role_arn
   handler       = "sipap_batch_scraper.jobs.team_stats_updater.lambda_handler"
   runtime       = "python3.12"
-  timeout       = 300  # 5 minutes
+  timeout       = 600  # 10 minutes (max for Lambda in VPC with lots of API calls)
   memory_size   = 512
   architectures = ["arm64"]
 

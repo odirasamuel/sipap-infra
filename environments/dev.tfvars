@@ -63,7 +63,8 @@ ecs_services = [
       { name = "LOG_LEVEL", value = "INFO" },
       { name = "MODEL_ID", value = "anthropic.claude-sonnet-4-5-20250929-v1" },
       { name = "REDIS_SSL", value = "true" },
-      { name = "ENABLE_WHATSAPP_DELIVERY", value = "false" },
+      { name = "ENABLE_WHATSAPP_DELIVERY", value = "true" },
+      { name = "TWILIO_SECRET_ARN", value = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/twilio-credentials-tngBnx" },
       # These will be interpolated in main.tf from remote state/outputs:
       # DATA_MCP_URL, INTELLIGENCE_MCP_URL, BEDROCK_PROFILE_ARN,
       # REDIS_ENDPOINT, SQS_QUEUE_URL, POSTGRES_HOST, POSTGRES_DB
@@ -72,6 +73,7 @@ ecs_services = [
     secrets = [
       # Aurora credentials from Secrets Manager
       # Format: { name = "ENV_VAR_NAME", value_from = "arn:aws:secretsmanager:..." }
+      # NOTE: TWILIO_SECRET_ARN is in environment_variables (it's the ARN itself, not fetched from Secrets Manager)
     ]
 
     health_check = {
