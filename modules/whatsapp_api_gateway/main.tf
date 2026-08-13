@@ -130,18 +130,27 @@ resource "aws_api_gateway_integration_response" "webhook_200" {
 resource "aws_api_gateway_deployment" "whatsapp" {
   rest_api_id = aws_api_gateway_rest_api.whatsapp.id
 
-  # Trigger new deployment when method or integration changes
+  # Trigger new deployment when method or integration configuration changes
+  # Use full resource content, not just IDs, to detect config changes
   triggers = {
     redeployment = sha1(jsonencode([
-      aws_api_gateway_method.webhook_post.id,
-      aws_api_gateway_integration.sqs.id,
-      aws_api_gateway_integration_response.webhook_200.id
+      aws_api_gateway_method.webhook_post,
+      aws_api_gateway_integration.sqs,
+      aws_api_gateway_integration_response.webhook_200,
+      aws_api_gateway_method_response.webhook_200
     ]))
   }
 
+  # Add description with hash to ensure deployment is actually created
+  description = "Deployment triggered by config hash: ${sha1(jsonencode([
+    aws_api_gateway_integration_response.webhook_200.response_parameters,
+    aws_api_gateway_integration_response.webhook_200.response_templates
+  ]))}"
+
   depends_on = [
     aws_api_gateway_integration.sqs,
-    aws_api_gateway_integration_response.webhook_200
+    aws_api_gateway_integration_response.webhook_200,
+    aws_api_gateway_method_response.webhook_200
   ]
 
   lifecycle {
