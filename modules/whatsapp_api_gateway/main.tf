@@ -45,7 +45,7 @@ resource "aws_api_gateway_method" "webhook_post" {
   resource_id      = aws_api_gateway_resource.webhook.id
   http_method      = "POST"
   authorization    = "NONE"
-  api_key_required = true
+  api_key_required = false  # Twilio cannot send custom headers; rely on X-Twilio-Signature validation instead
 }
 
 # ==============================================================================
@@ -67,11 +67,12 @@ resource "aws_api_gateway_integration" "sqs" {
     "integration.request.header.Content-Type" = "'application/x-www-form-urlencoded'"
   }
 
-  # VTL template: Transform Twilio webhook JSON → SQS SendMessage params
-  # MessageGroupId = phone number from $.From (ensures FIFO ordering per user)
+  # VTL template: Transform Twilio webhook → SQS SendMessage params
+  # MessageGroupId = phone number from $.From (URL-encoded for SQS alphanumeric requirement)
   # MessageDeduplicationId = request ID (prevents duplicates)
   request_templates = {
-    "application/json" = "Action=SendMessage&QueueUrl=${var.sqs_queue_url}&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$input.path('$.From')&MessageDeduplicationId=$context.requestId"
+    "application/json"                  = "Action=SendMessage&QueueUrl=${var.sqs_queue_url}&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$util.urlEncode($input.path('$.From'))&MessageDeduplicationId=$context.requestId"
+    "application/x-www-form-urlencoded" = "Action=SendMessage&QueueUrl=${var.sqs_queue_url}&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$util.urlEncode($input.params('From'))&MessageDeduplicationId=$context.requestId"
   }
 
   timeout_milliseconds = 29000
@@ -84,8 +85,13 @@ resource "aws_api_gateway_method_response" "webhook_200" {
   http_method = aws_api_gateway_method.webhook_post.http_method
   status_code = "200"
 
+  response_parameters = {
+    "method.response.header.Content-Type" = true
+  }
+
+  # Twilio expects TwiML (XML) response format
   response_models = {
-    "application/json" = "Empty"
+    "text/xml" = "Empty"
   }
 }
 
@@ -96,11 +102,14 @@ resource "aws_api_gateway_integration_response" "webhook_200" {
   http_method = aws_api_gateway_method.webhook_post.http_method
   status_code = aws_api_gateway_method_response.webhook_200.status_code
 
+  response_parameters = {
+    "method.response.header.Content-Type" = "'text/xml'"
+  }
+
+  # Return TwiML (XML) response - Twilio requires XML format to avoid Error 12300
   response_templates = {
-    "application/json" = jsonencode({
-      message   = "Message sent to queue"
-      requestId = "$context.requestId"
-    })
+    "application/json"                  = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
+    "application/x-www-form-urlencoded" = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
   }
 
   depends_on = [aws_api_gateway_integration.sqs]
@@ -112,6 +121,15 @@ resource "aws_api_gateway_integration_response" "webhook_200" {
 
 resource "aws_api_gateway_deployment" "whatsapp" {
   rest_api_id = aws_api_gateway_rest_api.whatsapp.id
+
+  # Trigger new deployment when method or integration changes
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_method.webhook_post.id,
+      aws_api_gateway_integration.sqs.id,
+      aws_api_gateway_integration_response.webhook_200.id
+    ]))
+  }
 
   depends_on = [
     aws_api_gateway_integration.sqs,
@@ -198,10 +216,12 @@ resource "aws_api_gateway_api_key" "twilio" {
 resource "aws_api_gateway_usage_plan" "whatsapp" {
   name = "${var.stack_name}-${var.env}-whatsapp-usage-plan"
 
-  api_stages {
-    api_id = aws_api_gateway_rest_api.whatsapp.id
-    stage  = aws_api_gateway_stage.prod.stage_name
-  }
+  # api_stages removed - Twilio cannot send API keys in custom headers
+  # Usage plan preserved for potential future use with Twilio signature validation
+  # api_stages {
+  #   api_id = aws_api_gateway_rest_api.whatsapp.id
+  #   stage  = aws_api_gateway_stage.prod.stage_name
+  # }
 
   throttle_settings {
     rate_limit  = var.throttle_rate_limit
