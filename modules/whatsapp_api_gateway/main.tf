@@ -107,10 +107,17 @@ resource "aws_api_gateway_integration_response" "webhook_200" {
   }
 
   # Return TwiML (XML) response - Twilio requires XML format to avoid Error 12300
+  # Multiple templates to handle different SQS response content-types
   response_templates = {
-    "application/json"                  = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
+    "application/json"              = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
     "application/x-www-form-urlencoded" = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
+    "text/xml"                      = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
+    "application/xml"               = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
+    "application/x-amz-json-1.0"    = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>"
   }
+
+  # Convert binary/non-text responses to text to ensure proper template application
+  content_handling = "CONVERT_TO_TEXT"
 
   depends_on = [aws_api_gateway_integration.sqs]
 }
