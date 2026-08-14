@@ -74,11 +74,11 @@ resource "aws_lambda_function" "api_football_odds_updater" {
   ]
 }
 
-# EventBridge Schedule: Every 1 hour (increased frequency for real-time accuracy)
+# EventBridge Schedule: Every 3 hours starting at 3 AM UTC+1 (2 AM UTC)
 resource "aws_cloudwatch_event_rule" "api_football_odds_updater_schedule" {
   name                = "${var.stack_name}-${var.env}-api-football-odds-updater-schedule"
-  description         = "Trigger API-Football odds updater job every hour for real-time accuracy"
-  schedule_expression = "cron(0 * * * ? *)"
+  description         = "Trigger API-Football odds updater job every 3 hours (2,5,8,11,14,17,20,23 UTC)"
+  schedule_expression = "cron(0 2,5,8,11,14,17,20,23 * * ? *)"
 
   tags = merge(
     {
