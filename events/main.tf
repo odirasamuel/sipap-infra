@@ -168,38 +168,6 @@ module "batch_scraper_eventbridge_role" {
 # - integration_test_lambda.tf
 
 # ============================================================================
-# ECS TASK DEFINITION (Daily Harvest Fargate)
+# NOTE: EventBridge schedules and Lambda resources are defined in their
+# respective files (e.g., api_football_odds_updater_lambda.tf)
 # ============================================================================
-
-# ============================================================================
-# EVENTBRIDGE SCHEDULES
-# ============================================================================
-
-# API-Football Odds Updater Schedule (10:00 AM UTC daily)
-resource "aws_cloudwatch_event_rule" "api_football_odds_updater" {
-  name                = "${var.stack_name}-${var.env}-api-football-odds-updater-schedule"
-  description         = "API-Football odds updater - runs daily at 10 AM UTC"
-  schedule_expression = "cron(0 10 * * ? *)"
-  state               = "ENABLED"
-
-  tags = merge(
-    {
-      Name = "${var.stack_name}-${var.env}-api-football-odds-updater-schedule"
-    },
-    var.additional_tags
-  )
-}
-
-resource "aws_cloudwatch_event_target" "api_football_odds_updater" {
-  rule      = aws_cloudwatch_event_rule.api_football_odds_updater.name
-  target_id = "APIFootballOddsUpdaterLambda"
-  arn       = aws_lambda_function.api_football_odds_updater.arn
-}
-
-resource "aws_lambda_permission" "api_football_odds_updater_eventbridge" {
-  statement_id  = "AllowEventBridgeInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.api_football_odds_updater.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.api_football_odds_updater.arn
-}
