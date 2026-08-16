@@ -307,6 +307,9 @@ module "ecr" {
     },
     {
       name = "odds-updater"
+    },
+    {
+      name = "db-query"
     }
   ]
 
