@@ -16,7 +16,7 @@ nat_gateway_count = 1
 
 # Database Configuration (Mode: Standard RDS for cost optimization)
 aurora_use_serverless  = false  # false = Standard RDS (cost-optimized), true = Aurora Serverless v2
-aurora_instance_class  = "db.t4g.micro"  # ~$12/mo vs Aurora Serverless ~$43-87/mo
+aurora_instance_class  = "db.t4g.medium"  # ~$50/mo - upgraded for 600K+ rows performance
 database_name          = "sipap_dev"
 db_master_username     = "sipap_admin"
 
