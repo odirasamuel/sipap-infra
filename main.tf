@@ -304,6 +304,9 @@ module "ecr" {
     },
     {
       name = "batch-scraper"
+    },
+    {
+      name = "odds-updater"
     }
   ]
 

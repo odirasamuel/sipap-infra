@@ -37,7 +37,6 @@ data "terraform_remote_state" "root" {
 locals {
   secrets_manager_policy_hash    = filesha256("${path.module}/../modules/policies/secrets_manager_policy.json")
   cloudwatch_logs_policy_hash    = filesha256("${path.module}/../modules/policies/cloudwatch_logs_policy.json")
-  lambda_invoke_policy_hash      = filesha256("${path.module}/../modules/policies/lambda_invoke_policy.json")
   ecs_run_task_policy_hash       = filesha256("${path.module}/../modules/policies/ecs_run_task_policy.json")
   dynamodb_backfill_policy_hash  = filesha256("${path.module}/../modules/policies/dynamodb_backfill_policy.json")
 }
@@ -124,33 +123,8 @@ module "batch_scraper_ecs_task_role" {
   })
 }
 
-# EventBridge Role for invoking Lambda and ECS tasks
-module "batch_scraper_eventbridge_role" {
-  source = "../modules/role"
-
-  stack_name       = var.stack_name
-  env              = var.env
-  aws_region       = var.aws_region
-  stack_tool       = "batch-scraper-eventbridge"
-  role_description = "EventBridge role for invoking batch scraper Lambda and ECS tasks"
-
-  assume_role_policy = templatefile("${path.module}/../modules/assume_role_policies/eventbridge_assume_role.json", {})
-
-  inline_policies = [
-    {
-      name = "invoke-lambda"
-      policy = templatefile("${path.module}/../modules/policies/lambda_invoke_policy.json", {
-        api_football_odds_updater_function_arn  = aws_lambda_function.api_football_odds_updater.arn
-        # fixture_updater removed - replaced by fixture_manager
-      })
-    }
-  ]
-
-  additional_tags = merge(var.additional_tags, {
-    LambdaInvokePolicyHash = local.lambda_invoke_policy_hash
-    EcsRunTaskPolicyHash   = local.ecs_run_task_policy_hash
-  })
-}
+# NOTE: EventBridge role for odds updater has been moved to odds_updater_ecs_task.tf
+# The Lambda-based odds updater has been replaced by an ECS Fargate task
 
 # ============================================================================
 # NOTE: Lambda functions are now defined in dedicated *_lambda.tf files
@@ -161,13 +135,15 @@ module "batch_scraper_eventbridge_role" {
 # - teams_metadata_sync_lambda.tf
 # - injuries_updater_lambda.tf
 # - lineups_fetcher_lambda.tf
-# - api_football_odds_updater_lambda.tf
 # - fixture_updater_lambda.tf
 # - h2h_fetcher_lambda.tf
 # - db_query_lambda.tf
 # - integration_test_lambda.tf
+#
+# NOTE: api_football_odds_updater has been migrated to ECS Fargate task
+# See: odds_updater_ecs_task.tf
 
 # ============================================================================
-# NOTE: EventBridge schedules and Lambda resources are defined in their
-# respective files (e.g., api_football_odds_updater_lambda.tf)
+# NOTE: EventBridge schedules and resources are defined in their
+# respective files (Lambda: *_lambda.tf, ECS: *_ecs_task.tf)
 # ============================================================================
