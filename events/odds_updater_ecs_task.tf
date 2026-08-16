@@ -158,7 +158,9 @@ resource "aws_ecs_task_definition" "odds_updater" {
       name  = "odds-updater"
       image = "${data.terraform_remote_state.root.outputs.ecr_repository_urls["odds-updater"]}:latest"
 
-      command = ["python", "-m", "sipap_batch_scraper.jobs.api_football_odds_updater", "--comprehensive"]
+      # Use Dockerfile's ENTRYPOINT + CMD (no command override needed)
+      # ENTRYPOINT: ["python", "-m", "sipap_batch_scraper.jobs.api_football_odds_updater"]
+      # CMD: ["--comprehensive"]
 
       environment = [
         {
