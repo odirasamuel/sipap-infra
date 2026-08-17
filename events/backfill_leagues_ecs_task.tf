@@ -116,10 +116,10 @@ resource "aws_ecs_task_definition" "backfill_leagues" {
       name  = "backfill-leagues"
       image = "${data.terraform_remote_state.root.outputs.ecr_repository_urls["db-query"]}:latest"
 
-      # Override command to run backfill_leagues instead of db_query
-      command = [
-        "python", "-m", "sipap_batch_scraper.jobs.backfill_leagues"
-      ]
+      # Override entrypoint and command to run backfill_leagues instead of db_query
+      # Note: Must override entryPoint because Dockerfile has ENTRYPOINT set
+      entryPoint = ["python", "-m", "sipap_batch_scraper.jobs.backfill_leagues"]
+      command = []
 
       environment = [
         {
