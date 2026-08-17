@@ -123,6 +123,10 @@ resource "aws_ecs_task_definition" "backfill_leagues" {
 
       environment = [
         {
+          name  = "PYTHONUNBUFFERED"
+          value = "1"
+        },
+        {
           name  = "AURORA_HOST"
           value = data.terraform_remote_state.root.outputs.aurora_cluster_endpoint
         },
