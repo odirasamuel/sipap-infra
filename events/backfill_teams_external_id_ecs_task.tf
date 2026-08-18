@@ -6,9 +6,11 @@
 # This links internal team UUIDs to API-Football external IDs, which is
 # critical for the Data MCP to look up team_statistics.
 #
+# Matching: exact + normalized only (no fuzzy matching - removed due to
+# unreliable results with character overlap algorithm)
+#
 # Environment variables:
 # - DRY_RUN: Set to "true" to report without making changes
-# - MATCH_THRESHOLD: Fuzzy match threshold (0-100, default: 85)
 #
 # Triggered via:
 # - GitHub Actions workflow (workflow_dispatch)
@@ -132,10 +134,6 @@ resource "aws_ecs_task_definition" "backfill_teams_external_id" {
         {
           name  = "AURORA_DATABASE"
           value = data.terraform_remote_state.root.outputs.aurora_database_name
-        },
-        {
-          name  = "MATCH_THRESHOLD"
-          value = "85"
         }
       ]
 
