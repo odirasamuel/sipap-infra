@@ -40,6 +40,11 @@ data "aws_s3_object" "intelligence_mcp_function" {
   key    = "intelligence-mcp/python_3.13/intelligence_mcp_lambda_package.zip"
 }
 
+# API Keys Secret (contains API_FOOTBALL_KEY)
+data "aws_secretsmanager_secret_version" "api_keys" {
+  secret_id = data.terraform_remote_state.base.outputs.api_keys_secret_arn
+}
+
 # ==============================================================================
 # REMOTE STATE - Reference parent module's outputs
 # ==============================================================================
@@ -481,9 +486,11 @@ module "data_mcp_lambda_internal" {
     POSTGRES_DB              = local.postgres_db
     POSTGRES_CREDENTIALS_ARN = local.postgres_credentials_arn
     LOG_LEVEL                = "INFO"
+    # API-Football key for direct API access (Data MCP redesign 2026-08-19)
+    API_FOOTBALL_KEY = jsondecode(data.aws_secretsmanager_secret_version.api_keys.secret_string)["API_FOOTBALL_KEY"]
   }
 
-  internal_lambda_description = "SIPAP Data MCP Server - Sports data, fixtures, standings"
+  internal_lambda_description = "SIPAP Data MCP Server - Sports data, fixtures, standings (v2.0 API-Football direct)"
 
   # Lambda Function URL Configuration
   enable_function_url                    = true
