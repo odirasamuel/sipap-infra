@@ -16,7 +16,7 @@ nat_gateway_count = 1
 
 # Database Configuration (Mode: Standard RDS for cost optimization)
 aurora_use_serverless  = false  # false = Standard RDS (cost-optimized), true = Aurora Serverless v2
-aurora_instance_class  = "db.t4g.medium"  # ~$50/mo - upgraded for 600K+ rows performance
+aurora_instance_class  = "db.t4g.micro"  # ~$12/mo - downsized after sports data removal (2026-08-20)
 database_name          = "sipap_dev"
 db_master_username     = "sipap_admin"
 
