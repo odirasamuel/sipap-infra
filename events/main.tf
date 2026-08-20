@@ -1,13 +1,10 @@
 # ============================================================================
 # BATCH SCRAPER EVENTS INFRASTRUCTURE
 # ============================================================================
-# Deploys 3 scheduled jobs:
-# 1. Daily Harvest (Fargate) - daily at 12:00 AM UTC
-# 2. API-Football Odds Updater (Lambda) - daily at 10:00 AM UTC (API-Football - 380 competitions)
-# 3. Fixture Updater (Lambda) - every 6 hours
+# NOTE: All scheduled Lambda functions and ECS tasks have been removed.
+# The system now uses API-Football directly instead of database-backed caching.
 #
-# All jobs use AWS Secrets Manager for API keys and DB credentials
-# Depends on root terraform state for VPC, subnets, security groups, secrets
+# This file is kept for potential future scheduled jobs.
 # ============================================================================
 
 data "aws_region" "current" {}
@@ -30,120 +27,14 @@ data "terraform_remote_state" "root" {
 }
 
 # ============================================================================
-# LOCALS FOR POLICY CHANGE TRACKING
+# NOTE: Lambda/ECS IAM roles and scheduled jobs have been removed
 # ============================================================================
-# Compute hashes of policy files to detect changes
-
-locals {
-  secrets_manager_policy_hash    = filesha256("${path.module}/../modules/policies/secrets_manager_policy.json")
-  cloudwatch_logs_policy_hash    = filesha256("${path.module}/../modules/policies/cloudwatch_logs_policy.json")
-  ecs_run_task_policy_hash       = filesha256("${path.module}/../modules/policies/ecs_run_task_policy.json")
-  dynamodb_backfill_policy_hash  = filesha256("${path.module}/../modules/policies/dynamodb_backfill_policy.json")
-}
-
-# ============================================================================
-# IAM ROLES
-# ============================================================================
-
-# Lambda Execution Role for batch scraper Lambda functions
-module "batch_scraper_lambda_role" {
-  source = "../modules/role"
-
-  stack_name       = var.stack_name
-  env              = var.env
-  aws_region       = var.aws_region
-  stack_tool       = "batch-scraper-lambda"
-  role_description = "Lambda execution role for batch scraper jobs (odds_updater, fixture_updater)"
-
-  assume_role_policy = templatefile("${path.module}/../modules/assume_role_policies/lambda_assume_role.json", {})
-
-  managed_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-  ]
-
-  inline_policies = [
-    {
-      name = "secrets-manager-access"
-      policy = templatefile("${path.module}/../modules/policies/secrets_manager_policy.json", {
-        aurora_credentials_secret_arn = data.terraform_remote_state.root.outputs.aurora_credentials_secret_arn
-        api_keys_secret_arn           = data.terraform_remote_state.root.outputs.api_keys_secret_arn
-      })
-    },
-    {
-      name = "cloudwatch-logs"
-      policy = templatefile("${path.module}/../modules/policies/cloudwatch_logs_policy.json", {
-        aws_region = data.aws_region.current.name
-        account_id = data.aws_caller_identity.current.account_id
-        stack_name = var.stack_name
-        env        = var.env
-      })
-    },
-    {
-      name = "dynamodb-backfill-progress"
-      policy = templatefile("${path.module}/../modules/policies/dynamodb_backfill_policy.json", {
-        aws_region = data.aws_region.current.name
-        account_id = data.aws_caller_identity.current.account_id
-        stack_name = var.stack_name
-        env        = var.env
-      })
-    }
-  ]
-
-  additional_tags = merge(var.additional_tags, {
-    SecretsManagerPolicyHash = local.secrets_manager_policy_hash
-    CloudWatchLogsPolicyHash = local.cloudwatch_logs_policy_hash
-    DynamoDBPolicyHash       = local.dynamodb_backfill_policy_hash
-  })
-}
-
-# ECS Task Role for daily harvest Fargate task
-module "batch_scraper_ecs_task_role" {
-  source = "../modules/role"
-
-  stack_name       = var.stack_name
-  env              = var.env
-  aws_region       = var.aws_region
-  stack_tool       = "batch-scraper-ecs-task"
-  role_description = "ECS task role for batch scraper daily harvest job"
-
-  assume_role_policy = templatefile("${path.module}/../modules/assume_role_policies/ecs_task_assume_role.json", {})
-
-  inline_policies = [
-    {
-      name = "secrets-manager-access"
-      policy = templatefile("${path.module}/../modules/policies/secrets_manager_policy.json", {
-        aurora_credentials_secret_arn = data.terraform_remote_state.root.outputs.aurora_credentials_secret_arn
-        api_keys_secret_arn           = data.terraform_remote_state.root.outputs.api_keys_secret_arn
-      })
-    }
-  ]
-
-  additional_tags = merge(var.additional_tags, {
-    SecretsManagerPolicyHash = local.secrets_manager_policy_hash
-  })
-}
-
-# NOTE: EventBridge role for odds updater has been moved to odds_updater_ecs_task.tf
-# The Lambda-based odds updater has been replaced by an ECS Fargate task
-
-# ============================================================================
-# NOTE: Lambda functions are now defined in dedicated *_lambda.tf files
-# ============================================================================
-# - daily_harvest_lambda.tf
-# - standings_updater_lambda.tf
-# - team_stats_updater_lambda.tf
-# - teams_metadata_sync_lambda.tf
-# - injuries_updater_lambda.tf
-# - lineups_fetcher_lambda.tf
-# - fixture_updater_lambda.tf
-# - h2h_fetcher_lambda.tf
-# - db_query_lambda.tf
-# - integration_test_lambda.tf
+# The following resources were removed during the API-Football migration:
+# - batch_scraper_lambda_role (Lambda execution role)
+# - batch_scraper_ecs_task_role (ECS task role)
+# - 9 Lambda functions (fixture_manager, standings_updater, etc.)
+# - 6 ECS Fargate tasks (odds_updater, backfill jobs, etc.)
+# - backfill_progress DynamoDB table
 #
-# NOTE: api_football_odds_updater has been migrated to ECS Fargate task
-# See: odds_updater_ecs_task.tf
-
-# ============================================================================
-# NOTE: EventBridge schedules and resources are defined in their
-# respective files (Lambda: *_lambda.tf, ECS: *_ecs_task.tf)
+# These can be recreated if scheduled jobs are needed in the future.
 # ============================================================================

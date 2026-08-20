@@ -383,8 +383,10 @@ module "common_layer" {
 }
 
 # ==============================================================================
-# DATA MCP DEPENDENCY LAYER - asyncpg for PostgreSQL
+# DATA MCP DEPENDENCY LAYER
 # ==============================================================================
+# NOTE (2026-08-20): Database removed. Layer now contains aiohttp for API-Football
+# instead of asyncpg. Description kept unchanged to avoid layer replacement.
 
 module "data_mcp_lambda_layers" {
   source = "../modules/lambda_layers"
@@ -478,19 +480,16 @@ module "data_mcp_lambda_internal" {
   lambda_ephemeral_storage_size = 1024
 
   # Environment Variables
+  # Database removed (2026-08-20) - Data MCP now uses API-Football directly
   internal_lambda_environment_variables = {
-    REDIS_ENDPOINT           = local.redis_endpoint
-    REDIS_SSL                = "false"
-    POSTGRES_HOST            = local.postgres_host
-    POSTGRES_PORT            = "5432"
-    POSTGRES_DB              = local.postgres_db
-    POSTGRES_CREDENTIALS_ARN = local.postgres_credentials_arn
-    LOG_LEVEL                = "INFO"
-    # API-Football key for direct API access (Data MCP redesign 2026-08-19)
+    REDIS_ENDPOINT   = local.redis_endpoint
+    REDIS_SSL        = "false"
+    LOG_LEVEL        = "INFO"
+    # API-Football key (required - Data MCP v3.0)
     API_FOOTBALL_KEY = jsondecode(data.aws_secretsmanager_secret_version.api_keys.secret_string)["API_FOOTBALL_KEY"]
   }
 
-  internal_lambda_description = "SIPAP Data MCP Server - Sports data, fixtures, standings (v2.0 API-Football direct)"
+  internal_lambda_description = "SIPAP Data MCP Server - Sports data, fixtures, standings (v3.0 API-Football only)"
 
   # Lambda Function URL Configuration
   enable_function_url                    = true
