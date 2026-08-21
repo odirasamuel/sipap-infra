@@ -77,14 +77,15 @@ ecs_services = [
     ]
 
     health_check = {
-      # Sentinel pattern: Check heartbeat file age (daemon mode)
-      # Heartbeat file is updated every ~20s during SQS polling (before each SQS long poll)
-      # If file age > 30s, daemon is stuck
-      command      = ["CMD-SHELL", "test -f /tmp/sipap-heartbeat || exit 1; LAST_UPDATED=$(jq -r .timestamp /tmp/sipap-heartbeat) && CURRENT_TIME=$(date +%s) && HEARTBEAT_AGE=$((CURRENT_TIME - $${LAST_UPDATED%.*})) && test $HEARTBEAT_AGE -le 30"]
-      interval     = 5   # Check every 5 seconds (Sentinel pattern)
-      timeout      = 2   # 2 seconds per check
-      retries      = 3   # Kill after 3 consecutive failures
-      start_period = 10  # 10 seconds grace period on startup
+      # UPDATED 2026-08-21: Increased tolerance for long-running batch predictions
+      # Background HeartbeatKeeper updates heartbeat every 10 seconds during processing
+      # Health check now allows up to 120 seconds between updates (12 updates missed)
+      # This prevents ECS from killing tasks during 5-10 minute batch predictions
+      command      = ["CMD-SHELL", "test -f /tmp/sipap-heartbeat || exit 1; LAST_UPDATED=$(jq -r .timestamp /tmp/sipap-heartbeat) && CURRENT_TIME=$(date +%s) && HEARTBEAT_AGE=$((CURRENT_TIME - $${LAST_UPDATED%.*})) && test $HEARTBEAT_AGE -le 120"]
+      interval     = 10  # Check every 10 seconds (was 5 - less aggressive)
+      timeout      = 5   # 5 seconds per check (was 2 - more lenient)
+      retries      = 6   # Kill after 6 consecutive failures = 60 seconds (was 3)
+      start_period = 60  # 60 seconds grace period on startup (was 10)
     }
 
     deployment_configuration = {
@@ -94,6 +95,6 @@ ecs_services = [
 
     enable_deployment_circuit_breaker = true
     enable_deployment_rollback        = true
-    force_new_deployment              = true  # Force deployment on every apply (triggers on image changes)
+    force_new_deployment              = false  # CHANGED: Don't force deployment on every apply (prevents task churn)
   }
 ]
