@@ -202,7 +202,10 @@ module "whatsapp_sqs" {
   env        = var.env
 
   # Queue configuration
-  visibility_timeout_seconds     = 60      # 1 minute (workflows complete in <10s, allows fast retries)
+  # 2026-08-22: Increased from 60s to 900s (15 minutes) for batch predictions
+  # Batch predictions process 100 fixtures × 44 markets and take 5-10+ minutes
+  # VisibilityTimeoutExtender extends every 60s, but needs base timeout to be long enough
+  visibility_timeout_seconds     = 900     # 15 minutes (batch predictions take 5-10+ minutes)
   dlq_visibility_timeout_seconds = 60      # 1 minute for DLQ
   max_message_size               = 262144  # 256 KB
   message_retention_seconds      = 1209600 # 14 days
