@@ -420,6 +420,59 @@ module "ecs_cluster" {
 }
 
 # ============================================================================
+# ECS AUTOSCALING
+# ============================================================================
+
+# ECS Autoscaling for orchestrator-service
+# Uses SQS queue depth as primary scaling metric (I/O bound workload)
+module "ecs_autoscaling" {
+  source = "./modules/ecs_autoscaling"
+
+  stack_name   = var.stack_name
+  env          = var.env
+  cluster_name = module.ecs_cluster.cluster_name
+
+  # Use AWS service-linked role for Application Auto Scaling
+  # This role is automatically created by AWS when first using autoscaling
+  service_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+
+  ecs_services = [
+    {
+      name         = "orchestrator-service"
+      service_name = "orchestrator-service"
+      min_capacity = var.orchestrator_autoscaling.min_capacity
+      max_capacity = var.orchestrator_autoscaling.max_capacity
+
+      # Disable CPU/memory scaling (I/O bound workload - waits on Bedrock API)
+      enable_cpu_scaling    = false
+      enable_memory_scaling = false
+
+      # Cooldowns optimized for long-running predictions (5-30 minutes)
+      scale_in_cooldown  = 600  # 10 minutes - wait for predictions to complete
+      scale_out_cooldown = 120  # 2 minutes - respond quickly to demand
+
+      # SQS-based scaling configuration
+      sqs_scaling_config = {
+        queue_name                    = try(local.core_deploy_outputs.whatsapp_queue_name, "${var.stack_name}-${var.env}-whatsapp-messages.fifo")
+        scale_up_threshold            = var.orchestrator_autoscaling.sqs_scale_up_threshold
+        scale_down_threshold          = 0     # Scale down when queue empty
+        scale_up_evaluation_periods   = 2     # 2 x 60s = 2 minutes sustained
+        scale_down_evaluation_periods = 3     # 3 x 300s = 15 minutes sustained
+        scale_up_period               = 60    # Check every minute for scale up
+        scale_down_period             = 300   # Check every 5 minutes for scale down
+      }
+    }
+  ]
+
+  additional_tags = var.additional_tags
+
+  depends_on = [module.ecs_cluster]
+}
+
+# Data source for current AWS account ID
+data "aws_caller_identity" "current" {}
+
+# ============================================================================
 # QUEUING
 # ============================================================================
 

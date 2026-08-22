@@ -85,6 +85,17 @@ variable "ecs_services" {
       min_capacity = number
       max_capacity = number
     })), [])
+
+    # SQS-based scaling configuration
+    sqs_scaling_config = optional(object({
+      queue_name                     = string
+      scale_up_threshold             = optional(number, 3)    # Messages to trigger scale up
+      scale_down_threshold           = optional(number, 0)    # Messages to trigger scale down
+      scale_up_evaluation_periods    = optional(number, 2)    # Periods before scale up (2 x 60s = 2 min)
+      scale_down_evaluation_periods  = optional(number, 3)    # Periods before scale down (3 x 300s = 15 min)
+      scale_up_period                = optional(number, 60)   # Alarm period for scale up (seconds)
+      scale_down_period              = optional(number, 300)  # Alarm period for scale down (seconds)
+    }), null)
   }))
 
   validation {

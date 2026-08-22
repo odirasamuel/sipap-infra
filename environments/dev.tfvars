@@ -98,3 +98,20 @@ ecs_services = [
     force_new_deployment              = false  # CHANGED: Don't force deployment on every apply (prevents task churn)
   }
 ]
+
+# ============================================================================
+# AUTOSCALING CONFIGURATION
+# ============================================================================
+# Uses SQS queue depth as primary scaling metric (I/O bound workload)
+# Scale up when multiple users send messages, scale down when queue empty
+
+orchestrator_autoscaling = {
+  min_capacity           = 1    # Always keep 1 task running for instant first response
+  max_capacity           = 4    # Max 4 tasks for cost control (~$140/mo max)
+  sqs_scale_up_threshold = 3    # Scale up when 3+ messages waiting in queue
+}
+
+# Autoscaling Behavior:
+# - Scale UP:   When >= 3 messages in queue for 2 minutes (responds quickly to demand)
+# - Scale DOWN: When queue empty for 15 minutes (prevents thrashing during lulls)
+# - Cooldown:   Scale out: 2 min, Scale in: 10 min (protects long-running predictions)

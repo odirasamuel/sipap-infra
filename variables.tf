@@ -138,3 +138,36 @@ variable "ecs_services" {
   }))
   default = [] # Empty by default, populated in tfvars
 }
+
+# ============================================================================
+# AUTOSCALING CONFIGURATION
+# ============================================================================
+
+variable "orchestrator_autoscaling" {
+  description = "Autoscaling configuration for orchestrator-service. Uses SQS queue depth as primary scaling metric."
+  type = object({
+    min_capacity           = number  # Minimum number of tasks (always running)
+    max_capacity           = number  # Maximum number of tasks (cost control)
+    sqs_scale_up_threshold = number  # Queue depth to trigger scale up
+  })
+  default = {
+    min_capacity           = 1  # Always keep 1 task for instant first response
+    max_capacity           = 4  # Cost-optimized MVP (~$140/mo max)
+    sqs_scale_up_threshold = 3  # Scale up when 3+ messages waiting
+  }
+
+  validation {
+    condition     = var.orchestrator_autoscaling.min_capacity >= 1
+    error_message = "min_capacity must be at least 1."
+  }
+
+  validation {
+    condition     = var.orchestrator_autoscaling.max_capacity >= var.orchestrator_autoscaling.min_capacity
+    error_message = "max_capacity must be >= min_capacity."
+  }
+
+  validation {
+    condition     = var.orchestrator_autoscaling.sqs_scale_up_threshold >= 1
+    error_message = "sqs_scale_up_threshold must be at least 1."
+  }
+}

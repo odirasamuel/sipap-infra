@@ -79,6 +79,36 @@ output "scaling_summary" {
       memory_scaling = contains(keys(aws_appautoscaling_policy.scale_up_memory), service_name)
       custom_scaling = contains(keys(aws_appautoscaling_policy.scale_custom_metric), service_name)
       step_scaling   = contains(keys(aws_appautoscaling_policy.step_scaling_up), service_name)
+      sqs_scaling    = contains(keys(aws_appautoscaling_policy.sqs_scale_up), service_name)
     }
+  }
+}
+
+# SQS-based scaling outputs
+output "sqs_scale_up_policy_arns" {
+  description = "Map of service names to their SQS-based scale up policy ARNs"
+  value = {
+    for service_name, policy in aws_appautoscaling_policy.sqs_scale_up : service_name => policy.arn
+  }
+}
+
+output "sqs_scale_down_policy_arns" {
+  description = "Map of service names to their SQS-based scale down policy ARNs"
+  value = {
+    for service_name, policy in aws_appautoscaling_policy.sqs_scale_down : service_name => policy.arn
+  }
+}
+
+output "sqs_high_alarm_arns" {
+  description = "Map of service names to their SQS high queue depth alarm ARNs"
+  value = {
+    for service_name, alarm in aws_cloudwatch_metric_alarm.sqs_scale_up : service_name => alarm.arn
+  }
+}
+
+output "sqs_low_alarm_arns" {
+  description = "Map of service names to their SQS low queue depth alarm ARNs"
+  value = {
+    for service_name, alarm in aws_cloudwatch_metric_alarm.sqs_scale_down : service_name => alarm.arn
   }
 }
