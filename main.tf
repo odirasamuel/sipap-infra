@@ -385,13 +385,17 @@ module "ecs_cluster" {
         ]
       )
 
-      # Merge secrets from tfvars with Aurora credentials
+      # Merge secrets from tfvars with Aurora credentials and API keys
       secrets = concat(
         service.secrets,
         [
           {
             name       = "POSTGRES_CREDENTIALS"
             value_from = module.aurora_credentials_secret.secret_arn
+          },
+          {
+            name       = "API_FOOTBALL_KEY"
+            value_from = "${module.api_keys_secret.secret_arn}:API_FOOTBALL_KEY::"
           }
         ]
       )
