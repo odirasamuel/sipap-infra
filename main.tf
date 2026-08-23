@@ -310,6 +310,9 @@ module "ecr" {
     },
     {
       name = "db-query"
+    },
+    {
+      name = "migrations"
     }
   ]
 
