@@ -61,9 +61,12 @@ ecs_services = [
       { name = "ENVIRONMENT", value = "dev" },
       { name = "SERVICE_NAME", value = "orchestrator-service" },
       { name = "LOG_LEVEL", value = "INFO" },
-      { name = "MODEL_ID", value = "anthropic.claude-sonnet-4-5-20250929-v1" },
+      # Use cross-region inference profile for 2x daily token quota (10.8M vs 5.4M)
+      { name = "MODEL_ID", value = "us.anthropic.claude-sonnet-4-5-20250929-v1:0" },
       { name = "REDIS_SSL", value = "true" },
       { name = "ENABLE_WHATSAPP_DELIVERY", value = "true" },
+      # Temporarily disable news agent to reduce token usage (news agent uses web_fetch which consumes many tokens)
+      { name = "ENABLED_AGENTS", value = "statistical,form" },
       { name = "TWILIO_SECRET_ARN", value = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/twilio-credentials-tngBnx" },
       # These will be interpolated in main.tf from remote state/outputs:
       # DATA_MCP_URL, INTELLIGENCE_MCP_URL, BEDROCK_PROFILE_ARN,
