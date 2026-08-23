@@ -18,21 +18,29 @@ echo "Database Host: $DB_HOST"
 echo "Database Name: $DB_NAME"
 echo "Database User: $DB_USER"
 
-# Get database password from Secrets Manager
+# Get database credentials from Secrets Manager (JSON format)
 echo ""
-echo "Retrieving database password from Secrets Manager..."
-DB_PASSWORD=$(aws secretsmanager get-secret-value \
+echo "Retrieving database credentials from Secrets Manager..."
+SECRET_JSON=$(aws secretsmanager get-secret-value \
     --secret-id "$SECRET_ARN" \
     --region "$AWS_REGION" \
     --query 'SecretString' \
     --output text)
 
-if [ -z "$DB_PASSWORD" ]; then
-    echo "ERROR: Failed to retrieve database password"
+if [ -z "$SECRET_JSON" ]; then
+    echo "ERROR: Failed to retrieve database credentials"
     exit 1
 fi
 
-echo "Password retrieved successfully"
+# Parse JSON to extract password (secret contains: username, password, host, port, database)
+DB_PASSWORD=$(echo "$SECRET_JSON" | jq -r '.password')
+
+if [ -z "$DB_PASSWORD" ] || [ "$DB_PASSWORD" = "null" ]; then
+    echo "ERROR: Failed to extract password from credentials JSON"
+    exit 1
+fi
+
+echo "Credentials retrieved successfully"
 
 # Export DB_PASSWORD for Alembic env.py
 export DB_PASSWORD
