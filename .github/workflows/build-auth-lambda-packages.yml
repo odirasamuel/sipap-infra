@@ -1,0 +1,226 @@
+name: Build & Push Auth Lambda Packages to S3
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lambda-functions/whatsapp-auth-handler/**'
+      - 'lambda-functions/payment-webhook-handler/**'
+      - '.github/workflows/build-auth-lambda-packages.yml'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even without changes'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: us-east-1
+  S3_BUCKET: sipap-lambda-packages-dev
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  build-whatsapp-auth:
+    name: Build WhatsApp Auth Handler
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SIPAP_DEV_AWS_ROLE_ARN }}
+          role-session-name: sipap-whatsapp-auth-build
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: |
+          aws sts get-caller-identity
+          echo "Python version: ${{ env.PYTHON_VERSION }}"
+
+      - name: Build WhatsApp Auth Lambda package
+        run: |
+          echo "=============================================="
+          echo "Building WhatsApp Auth Handler Lambda"
+          echo "Python: ${{ env.PYTHON_VERSION }}"
+          echo "=============================================="
+
+          PACKAGE_DIR="lambda_package"
+          SOURCE_DIR="lambda-functions/whatsapp-auth-handler"
+
+          rm -rf "${PACKAGE_DIR}"
+          mkdir -p "${PACKAGE_DIR}"
+
+          # Install dependencies
+          echo "Installing dependencies..."
+          pip install \
+            psycopg2-binary>=2.9.9 \
+            boto3>=1.34.0 \
+            -t "${PACKAGE_DIR}/" \
+            --platform manylinux2014_x86_64 \
+            --only-binary=:all: \
+            --python-version ${{ env.PYTHON_VERSION }}
+
+          # Copy handler code
+          echo "Copying handler code..."
+          cp "${SOURCE_DIR}/handler.py" "${PACKAGE_DIR}/"
+
+          # Clean up unnecessary files
+          find "${PACKAGE_DIR}" -type d -name "__pycache__" -exec rm -rf {} + || true
+          find "${PACKAGE_DIR}" -type f -name "*.pyc" -delete || true
+          find "${PACKAGE_DIR}" -type d -name "*.dist-info" -exec rm -rf {} + || true
+
+          # Create zip
+          echo "Creating deployment package..."
+          (cd "${PACKAGE_DIR}" && zip -X -r ../whatsapp_auth_handler.zip .)
+
+          echo "Package created:"
+          ls -lh whatsapp_auth_handler.zip
+
+      - name: Upload WhatsApp Auth package to S3
+        run: |
+          set -euo pipefail
+
+          PY_FOLDER="python_${{ env.PYTHON_VERSION }}"
+          KEY="auth-handlers/${PY_FOLDER}/whatsapp_auth_handler.zip"
+          ZIP_FILE="whatsapp_auth_handler.zip"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          echo "Uploading to s3://${S3_BUCKET}/${KEY}"
+
+          aws s3 cp \
+            "${ZIP_FILE}" \
+            "s3://${S3_BUCKET}/${KEY}" \
+            --metadata "git-sha=${{ github.sha }},git-branch=${{ github.ref_name }},python-version=${{ env.PYTHON_VERSION }},package-type=lambda-function,build-date=${BUILD_DATE},handler=whatsapp-auth"
+
+          echo "✅ Upload successful!"
+          echo "Bucket: ${S3_BUCKET}"
+          echo "Key: ${KEY}"
+          echo "Git SHA: ${{ github.sha }}"
+
+  build-payment-webhook:
+    name: Build Payment Webhook Handler
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SIPAP_DEV_AWS_ROLE_ARN }}
+          role-session-name: sipap-payment-webhook-build
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: |
+          aws sts get-caller-identity
+          echo "Python version: ${{ env.PYTHON_VERSION }}"
+
+      - name: Build Payment Webhook Lambda package
+        run: |
+          echo "=============================================="
+          echo "Building Payment Webhook Handler Lambda"
+          echo "Python: ${{ env.PYTHON_VERSION }}"
+          echo "=============================================="
+
+          PACKAGE_DIR="lambda_package"
+          SOURCE_DIR="lambda-functions/payment-webhook-handler"
+
+          rm -rf "${PACKAGE_DIR}"
+          mkdir -p "${PACKAGE_DIR}"
+
+          # Install dependencies
+          echo "Installing dependencies..."
+          pip install \
+            psycopg2-binary>=2.9.9 \
+            boto3>=1.34.0 \
+            -t "${PACKAGE_DIR}/" \
+            --platform manylinux2014_x86_64 \
+            --only-binary=:all: \
+            --python-version ${{ env.PYTHON_VERSION }}
+
+          # Copy handler code
+          echo "Copying handler code..."
+          cp "${SOURCE_DIR}/handler.py" "${PACKAGE_DIR}/"
+
+          # Clean up unnecessary files
+          find "${PACKAGE_DIR}" -type d -name "__pycache__" -exec rm -rf {} + || true
+          find "${PACKAGE_DIR}" -type f -name "*.pyc" -delete || true
+          find "${PACKAGE_DIR}" -type d -name "*.dist-info" -exec rm -rf {} + || true
+
+          # Create zip
+          echo "Creating deployment package..."
+          (cd "${PACKAGE_DIR}" && zip -X -r ../payment_webhook_handler.zip .)
+
+          echo "Package created:"
+          ls -lh payment_webhook_handler.zip
+
+      - name: Upload Payment Webhook package to S3
+        run: |
+          set -euo pipefail
+
+          PY_FOLDER="python_${{ env.PYTHON_VERSION }}"
+          KEY="auth-handlers/${PY_FOLDER}/payment_webhook_handler.zip"
+          ZIP_FILE="payment_webhook_handler.zip"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          echo "Uploading to s3://${S3_BUCKET}/${KEY}"
+
+          aws s3 cp \
+            "${ZIP_FILE}" \
+            "s3://${S3_BUCKET}/${KEY}" \
+            --metadata "git-sha=${{ github.sha }},git-branch=${{ github.ref_name }},python-version=${{ env.PYTHON_VERSION }},package-type=lambda-function,build-date=${BUILD_DATE},handler=payment-webhook"
+
+          echo "✅ Upload successful!"
+          echo "Bucket: ${S3_BUCKET}"
+          echo "Key: ${KEY}"
+          echo "Git SHA: ${{ github.sha }}"
+
+  summary:
+    name: Build Summary
+    needs: [build-whatsapp-auth, build-payment-webhook]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "### Auth Lambda Packages Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Package | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| WhatsApp Auth Handler | ${{ needs.build-whatsapp-auth.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Payment Webhook Handler | ${{ needs.build-payment-webhook.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**S3 Paths:**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/whatsapp_auth_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/payment_webhook_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Git SHA:** \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PYTHON_VERSION: '3.13'

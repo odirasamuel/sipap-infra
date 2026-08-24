@@ -40,6 +40,18 @@ data "aws_s3_object" "intelligence_mcp_function" {
   key    = "intelligence-mcp/python_3.13/intelligence_mcp_lambda_package.zip"
 }
 
+# WhatsApp Auth Handler Function Code
+data "aws_s3_object" "whatsapp_auth_function" {
+  bucket = "sipap-lambda-packages-dev"
+  key    = "auth-handlers/python_3.13/whatsapp_auth_handler.zip"
+}
+
+# Payment Webhook Handler Function Code
+data "aws_s3_object" "payment_webhook_function" {
+  bucket = "sipap-lambda-packages-dev"
+  key    = "auth-handlers/python_3.13/payment_webhook_handler.zip"
+}
+
 # API Keys Secret (contains API_FOOTBALL_KEY)
 data "aws_secretsmanager_secret_version" "api_keys" {
   secret_id = data.terraform_remote_state.base.outputs.api_keys_secret_arn
@@ -225,9 +237,16 @@ module "whatsapp_api_gateway" {
   stack_name = var.stack_name
   env        = var.env
 
-  # SQS integration
+  # SQS integration (still needed for Lambda to forward authenticated messages)
   sqs_queue_url = module.whatsapp_sqs.queue_url
   sqs_queue_arn = module.whatsapp_sqs.queue_arn
+
+  # Lambda integration for authentication
+  # When enabled, API Gateway routes to Lambda first, which checks subscription status
+  # and either forwards to SQS (active users) or returns signup/renewal links (new/expired users)
+  use_lambda_integration = var.enable_whatsapp_auth
+  lambda_invoke_arn      = var.enable_whatsapp_auth ? module.whatsapp_auth_lambda.invoke_arn : ""
+  lambda_function_name   = var.enable_whatsapp_auth ? module.whatsapp_auth_lambda.function_name : ""
 
   # Observability
   enable_xray_tracing = true
@@ -244,6 +263,8 @@ module "whatsapp_api_gateway" {
   depends_on = [
     module.whatsapp_sqs,
     aws_api_gateway_account.main
+    # Note: module.whatsapp_auth_lambda removed to break circular dependency
+    # Implicit dependency exists via lambda_invoke_arn and lambda_function_name references
   ]
 }
 
@@ -731,4 +752,50 @@ module "orchestrator_security_group" {
   additional_tags = merge(var.additional_tags, {
     Purpose = "orchestrator-ecs-service"
   })
+}
+
+# ==============================================================================
+# WHATSAPP AUTH HANDLER LAMBDA - Authentication layer before SQS
+# ==============================================================================
+
+module "whatsapp_auth_lambda" {
+  source = "../modules/whatsapp_auth_lambda"
+
+  function_name = "${var.stack_name}-${var.env}-whatsapp-auth-handler"
+  env           = var.env
+
+  # S3-based deployment configuration
+  use_s3_deployment = true
+  s3_bucket         = local.lambda_packages_bucket
+  s3_key            = "auth-handlers/python_3.13/whatsapp_auth_handler.zip"
+  s3_object_version = data.aws_s3_object.whatsapp_auth_function.version_id
+
+  # VPC Configuration (Aurora access)
+  private_subnet_ids = local.private_subnet_ids
+  security_group_ids = [module.lambda_internal_security_group.security_group_id]
+
+  # Database and Queue
+  postgres_secret_arn = local.postgres_credentials_arn
+  sqs_queue_url       = module.whatsapp_sqs.queue_url
+  sqs_queue_arn       = module.whatsapp_sqs.queue_arn
+  base_url            = var.ridhatech_base_url
+
+  # API Gateway permission
+  enable_api_gateway_permission = true
+  api_gateway_execution_arn     = module.whatsapp_api_gateway.execution_arn
+
+  # Runtime configuration
+  lambda_runtime     = "python3.13"
+  lambda_timeout     = 30
+  lambda_memory_size = 256
+
+  additional_tags = merge(var.additional_tags, {
+    Service     = "whatsapp-auth"
+    PackageETag = data.aws_s3_object.whatsapp_auth_function.etag
+  })
+
+  depends_on = [
+    module.whatsapp_sqs,
+    module.lambda_internal_security_group
+  ]
 }
