@@ -4,6 +4,12 @@ Payment Webhook Handler Lambda
 Handles payment webhooks from Stripe, Paystack, and Flutterwave.
 Updates user subscriptions and sends WhatsApp confirmations.
 
+Features:
+- Idempotency protection via database constraints
+- Payment attempt tracking for reconciliation
+- Grace period calculation (24 hours)
+- Notification retry queue for failed WhatsApp messages
+
 Supported Events:
 - Stripe: checkout.session.completed
 - Paystack: charge.success
@@ -15,6 +21,7 @@ Environment Variables:
     PAYSTACK_SECRET_KEY: Paystack secret key for webhook verification
     FLUTTERWAVE_WEBHOOK_SECRET: Flutterwave webhook secret for verification
     TWILIO_SECRET_ARN: ARN of Secrets Manager secret with Twilio credentials
+    WHATSAPP_NOTIFICATION_QUEUE_URL: SQS queue URL for notification retries
 """
 
 import hashlib
@@ -22,6 +29,7 @@ import hmac
 import json
 import logging
 import os
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
@@ -35,6 +43,7 @@ logger.setLevel(logging.INFO)
 
 # Initialize AWS clients
 secrets_manager = boto3.client('secretsmanager')
+sqs = boto3.client('sqs')
 
 # Environment variables
 POSTGRES_SECRET_ARN = os.environ.get('POSTGRES_SECRET_ARN', '')
@@ -42,6 +51,10 @@ STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
 FLUTTERWAVE_WEBHOOK_SECRET = os.environ.get('FLUTTERWAVE_WEBHOOK_SECRET', '')
 TWILIO_SECRET_ARN = os.environ.get('TWILIO_SECRET_ARN', '')
+WHATSAPP_NOTIFICATION_QUEUE_URL = os.environ.get('WHATSAPP_NOTIFICATION_QUEUE_URL', '')
+
+# Grace period duration (24 hours after subscription expiration)
+GRACE_PERIOD_HOURS = 24
 
 
 class PaymentData(TypedDict):
@@ -74,6 +87,11 @@ def get_db_connection():
     )
 
 
+# =============================================================================
+# Signature Verification
+# =============================================================================
+
+
 def verify_stripe_signature(payload: str, signature: str) -> bool:
     """
     Verify Stripe webhook signature.
@@ -86,12 +104,10 @@ def verify_stripe_signature(payload: str, signature: str) -> bool:
         True if signature is valid
     """
     try:
-        # Parse the signature header
         elements = dict(item.split('=') for item in signature.split(','))
         timestamp = elements.get('t', '')
         expected_sig = elements.get('v1', '')
 
-        # Compute expected signature
         signed_payload = f"{timestamp}.{payload}"
         computed_sig = hmac.new(
             STRIPE_WEBHOOK_SECRET.encode('utf-8'),
@@ -99,7 +115,6 @@ def verify_stripe_signature(payload: str, signature: str) -> bool:
             hashlib.sha256
         ).hexdigest()
 
-        # Compare signatures
         return hmac.compare_digest(computed_sig, expected_sig)
     except Exception as e:
         logger.error(f"Stripe signature verification failed: {e}")
@@ -152,6 +167,11 @@ def verify_flutterwave_signature(signature: str) -> bool:
         return False
 
 
+# =============================================================================
+# Payment Data Extraction
+# =============================================================================
+
+
 def extract_stripe_payment_data(event: dict) -> PaymentData | None:
     """Extract payment data from Stripe checkout.session.completed event."""
     try:
@@ -201,7 +221,7 @@ def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
         "event": "charge.completed",
         "data": {
             "id": 12345678,
-            "tx_ref": "SIPAP_1234567890_abc123",
+            "tx_ref": "VALO_1234567890_abc123",
             "flw_ref": "FLW-MOCK-xxxxx",
             "amount": 2,
             "currency": "USD",
@@ -225,10 +245,8 @@ def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
         meta = data.get('meta', {})
         customer = data.get('customer', {})
 
-        # Get phone number from meta or customer
         phone_number = meta.get('phone_number', '') or customer.get('phone_number', '')
 
-        # Handle weeks as string or int
         weeks_raw = meta.get('weeks', '1')
         weeks = int(weeks_raw) if isinstance(weeks_raw, str) else weeks_raw
 
@@ -237,7 +255,7 @@ def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
             'tier': meta.get('tier', 'basic'),
             'weeks': weeks,
             'provider': 'flutterwave',
-            'amount_usd': data.get('amount', 0),  # Flutterwave already in USD
+            'amount_usd': data.get('amount', 0),
             'customer_email': customer.get('email'),
             'reference': data.get('tx_ref', '') or data.get('flw_ref', ''),
         }
@@ -246,9 +264,108 @@ def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
         return None
 
 
+# =============================================================================
+# Idempotency and Tracking
+# =============================================================================
+
+
+def check_already_processed(cursor, provider: str, reference: str) -> bool:
+    """
+    Check if this payment webhook was already processed.
+
+    Args:
+        cursor: Database cursor
+        provider: Payment provider (stripe, paystack, flutterwave)
+        reference: Payment reference/session ID
+
+    Returns:
+        True if already processed (duplicate webhook)
+    """
+    if not reference:
+        return False
+
+    cursor.execute(
+        """
+        SELECT id FROM subscription_events
+        WHERE (stripe_session_id = %s OR paystack_reference = %s OR flutterwave_reference = %s)
+        AND status = 'succeeded'
+        LIMIT 1
+        """,
+        (reference, reference, reference)
+    )
+    return cursor.fetchone() is not None
+
+
+def record_payment_attempt(
+    cursor,
+    payment_data: PaymentData,
+    status: str,
+    failure_reason: str | None = None,
+    raw_payload: dict | None = None
+) -> None:
+    """
+    Record payment attempt for tracking and reconciliation.
+
+    Args:
+        cursor: Database cursor
+        payment_data: Extracted payment information
+        status: Attempt status (pending, succeeded, failed)
+        failure_reason: Reason for failure if applicable
+        raw_payload: Raw webhook payload for debugging
+    """
+    processed_at = datetime.now(timezone.utc) if status != 'pending' else None
+
+    cursor.execute(
+        """
+        INSERT INTO payment_attempts (
+            phone_number, provider, provider_reference, amount_usd,
+            tier, weeks, status, failure_reason, webhook_received_at,
+            raw_webhook_payload, processed_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
+        ON CONFLICT (provider, provider_reference) WHERE provider_reference IS NOT NULL
+        DO UPDATE SET
+            status = EXCLUDED.status,
+            failure_reason = EXCLUDED.failure_reason,
+            processed_at = EXCLUDED.processed_at,
+            updated_at = NOW(),
+            retry_count = payment_attempts.retry_count + 1
+        """,
+        (
+            payment_data['phone_number'],
+            payment_data['provider'],
+            payment_data['reference'],
+            payment_data['amount_usd'],
+            payment_data['tier'],
+            payment_data['weeks'],
+            status,
+            failure_reason,
+            json.dumps(raw_payload) if raw_payload else None,
+            processed_at,
+        )
+    )
+
+
+def calculate_grace_period(expires_at: datetime) -> datetime:
+    """
+    Calculate grace period (24 hours after expiration).
+
+    Args:
+        expires_at: Subscription expiration timestamp
+
+    Returns:
+        Grace period end timestamp
+    """
+    return expires_at + timedelta(hours=GRACE_PERIOD_HOURS)
+
+
+# =============================================================================
+# Subscription Update
+# =============================================================================
+
+
 def update_subscription(payment_data: PaymentData) -> bool:
     """
-    Update user subscription in the database.
+    Update user subscription in the database with grace period.
 
     Args:
         payment_data: Extracted payment information
@@ -260,21 +377,23 @@ def update_subscription(payment_data: PaymentData) -> bool:
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # Calculate new expiration date
+            # Calculate expiration and grace period
             expires_at = datetime.now(timezone.utc) + timedelta(weeks=payment_data['weeks'])
+            grace_until = calculate_grace_period(expires_at)
 
-            # Update user subscription
+            # Update user subscription with grace period
             cursor.execute(
                 """
                 UPDATE users SET
                     subscription_status = 'active',
                     subscription_tier = %s,
                     subscription_expires_at = %s,
+                    subscription_grace_until = %s,
                     updated_at = NOW()
                 WHERE phone_number = %s
                 RETURNING id, name
                 """,
-                (payment_data['tier'], expires_at, payment_data['phone_number'])
+                (payment_data['tier'], expires_at, grace_until, payment_data['phone_number'])
             )
 
             user = cursor.fetchone()
@@ -282,8 +401,7 @@ def update_subscription(payment_data: PaymentData) -> bool:
                 logger.error(f"User not found: {payment_data['phone_number']}")
                 return False
 
-            # Record subscription event
-            # Use appropriate reference field based on provider
+            # Record subscription event with all columns
             stripe_ref = payment_data['reference'] if payment_data['provider'] == 'stripe' else None
             paystack_ref = payment_data['reference'] if payment_data['provider'] == 'paystack' else None
             flutterwave_ref = payment_data['reference'] if payment_data['provider'] == 'flutterwave' else None
@@ -292,13 +410,13 @@ def update_subscription(payment_data: PaymentData) -> bool:
                 """
                 INSERT INTO subscription_events (
                     user_id, event_type, provider, amount_usd,
-                    stripe_session_id, paystack_reference, flutterwave_reference, metadata
-                ) VALUES (
-                    %s, 'payment_succeeded', %s, %s, %s, %s, %s, %s
-                )
+                    stripe_session_id, paystack_reference, flutterwave_reference,
+                    metadata, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     user['id'],
+                    'payment_succeeded',
                     payment_data['provider'],
                     payment_data['amount_usd'],
                     stripe_ref,
@@ -309,11 +427,16 @@ def update_subscription(payment_data: PaymentData) -> bool:
                         'weeks': payment_data['weeks'],
                         'customer_email': payment_data['customer_email'],
                     }),
+                    'succeeded',
                 )
             )
 
         conn.commit()
-        logger.info(f"Subscription updated for {payment_data['phone_number']}: {payment_data['tier']} x {payment_data['weeks']} weeks")
+        logger.info(
+            f"Subscription updated for {payment_data['phone_number']}: "
+            f"{payment_data['tier']} x {payment_data['weeks']} weeks "
+            f"(expires: {expires_at}, grace until: {grace_until})"
+        )
         return True
 
     except Exception as e:
@@ -324,6 +447,11 @@ def update_subscription(payment_data: PaymentData) -> bool:
     finally:
         if conn:
             conn.close()
+
+
+# =============================================================================
+# WhatsApp Notifications
+# =============================================================================
 
 
 def send_whatsapp_confirmation(phone_number: str, tier: str, weeks: int) -> bool:
@@ -348,13 +476,12 @@ def send_whatsapp_confirmation(phone_number: str, tier: str, weeks: int) -> bool
         auth_token = twilio_creds['auth_token']
         from_number = twilio_creds.get('whatsapp_number', 'whatsapp:+15553836181')
 
-        # Send via Twilio API
         import urllib.request
         import base64
 
         tier_name = 'Pro' if tier == 'pro' else 'Basic'
         message = (
-            f"Payment confirmed! Your SIPAP {tier_name} subscription is now active for {weeks} week(s). "
+            f"Payment confirmed! Your Valo {tier_name} subscription is now active for {weeks} week(s). "
             f"Send me a team name or match to get AI-powered predictions!"
         )
 
@@ -366,7 +493,6 @@ def send_whatsapp_confirmation(phone_number: str, tier: str, weeks: int) -> bool
             'Body': message,
         }
 
-        # URL encode the data
         encoded_data = '&'.join(f"{k}={urllib.parse.quote(str(v))}" for k, v in data.items()).encode('utf-8')
 
         request = urllib.request.Request(url, data=encoded_data, method='POST')
@@ -387,9 +513,41 @@ def send_whatsapp_confirmation(phone_number: str, tier: str, weeks: int) -> bool
         return False
 
 
+def queue_whatsapp_notification(payment_data: PaymentData) -> None:
+    """
+    Queue WhatsApp notification for retry via SQS.
+
+    Args:
+        payment_data: Payment data with phone_number, tier, weeks
+    """
+    try:
+        if not WHATSAPP_NOTIFICATION_QUEUE_URL:
+            logger.warning("WHATSAPP_NOTIFICATION_QUEUE_URL not configured, cannot queue notification")
+            return
+
+        sqs.send_message(
+            QueueUrl=WHATSAPP_NOTIFICATION_QUEUE_URL,
+            MessageBody=json.dumps({
+                'phone_number': payment_data['phone_number'],
+                'tier': payment_data['tier'],
+                'weeks': payment_data['weeks'],
+                'retry_count': 0,
+            })
+        )
+        logger.info(f"Queued WhatsApp notification for retry: {payment_data['phone_number']}")
+
+    except Exception as e:
+        logger.error(f"Failed to queue WhatsApp notification: {e}")
+
+
+# =============================================================================
+# Main Handler
+# =============================================================================
+
+
 def handler(event: dict, context) -> dict:
     """
-    Lambda handler for payment webhooks.
+    Lambda handler for payment webhooks with idempotency and tracking.
 
     Args:
         event: API Gateway event with webhook payload
@@ -398,6 +556,10 @@ def handler(event: dict, context) -> dict:
     Returns:
         API Gateway response
     """
+    raw_body = None
+    payment_data = None
+    conn = None
+
     try:
         # Extract headers and body
         headers = event.get('headers', {})
@@ -408,15 +570,18 @@ def handler(event: dict, context) -> dict:
             import base64
             body = base64.b64decode(body).decode('utf-8')
 
+        raw_body = body
+
         # Determine provider based on headers
         stripe_signature = headers.get('stripe-signature') or headers.get('Stripe-Signature', '')
         paystack_signature = headers.get('x-paystack-signature') or headers.get('X-Paystack-Signature', '')
         flutterwave_signature = headers.get('verif-hash') or headers.get('Verif-Hash', '')
 
-        payment_data = None
+        # =====================================================================
+        # Provider Detection and Signature Verification
+        # =====================================================================
 
         if stripe_signature:
-            # Stripe webhook
             logger.info("Processing Stripe webhook")
 
             if not verify_stripe_signature(body, stripe_signature):
@@ -438,7 +603,6 @@ def handler(event: dict, context) -> dict:
             payment_data = extract_stripe_payment_data(webhook_event)
 
         elif paystack_signature:
-            # Paystack webhook
             logger.info("Processing Paystack webhook")
 
             if not verify_paystack_signature(body, paystack_signature):
@@ -460,7 +624,6 @@ def handler(event: dict, context) -> dict:
             payment_data = extract_paystack_payment_data(webhook_event)
 
         elif flutterwave_signature:
-            # Flutterwave webhook
             logger.info("Processing Flutterwave webhook")
 
             if not verify_flutterwave_signature(flutterwave_signature):
@@ -472,7 +635,6 @@ def handler(event: dict, context) -> dict:
 
             webhook_event = json.loads(body)
 
-            # Check for charge.completed event with successful status
             if webhook_event.get('event') != 'charge.completed':
                 logger.info(f"Ignoring Flutterwave event: {webhook_event.get('event')}")
                 return {
@@ -480,7 +642,6 @@ def handler(event: dict, context) -> dict:
                     'body': json.dumps({'received': True}),
                 }
 
-            # Verify payment was successful
             event_data = webhook_event.get('data', {})
             if event_data.get('status') != 'successful':
                 logger.info(f"Ignoring Flutterwave payment with status: {event_data.get('status')}")
@@ -498,6 +659,10 @@ def handler(event: dict, context) -> dict:
                 'body': json.dumps({'error': 'Missing signature header'}),
             }
 
+        # =====================================================================
+        # Validate Payment Data
+        # =====================================================================
+
         if not payment_data or not payment_data['phone_number']:
             logger.error("Invalid payment data")
             return {
@@ -505,32 +670,92 @@ def handler(event: dict, context) -> dict:
                 'body': json.dumps({'error': 'Invalid payment data'}),
             }
 
-        # Update subscription
+        # =====================================================================
+        # Idempotency Check
+        # =====================================================================
+
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            # Check if already processed (idempotency)
+            if check_already_processed(cursor, payment_data['provider'], payment_data['reference']):
+                logger.info(f"Duplicate webhook ignored: {payment_data['reference']}")
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps({'received': True, 'duplicate': True}),
+                }
+
+            # Record payment attempt as pending
+            record_payment_attempt(
+                cursor, payment_data, 'pending',
+                raw_payload=json.loads(raw_body) if raw_body else None
+            )
+            conn.commit()
+
+        # =====================================================================
+        # Process Subscription Update
+        # =====================================================================
+
         if update_subscription(payment_data):
-            # Send WhatsApp confirmation
-            send_whatsapp_confirmation(
+            # Update payment attempt to succeeded
+            with conn.cursor() as cursor:
+                record_payment_attempt(cursor, payment_data, 'succeeded')
+                conn.commit()
+
+            # Send WhatsApp confirmation (queue for retry if fails)
+            whatsapp_sent = send_whatsapp_confirmation(
                 payment_data['phone_number'],
                 payment_data['tier'],
                 payment_data['weeks'],
             )
+
+            if not whatsapp_sent:
+                # Queue for retry instead of silently failing
+                queue_whatsapp_notification(payment_data)
 
             return {
                 'statusCode': 200,
                 'body': json.dumps({'received': True, 'subscription_updated': True}),
             }
         else:
+            # Update payment attempt to failed
+            with conn.cursor() as cursor:
+                record_payment_attempt(
+                    cursor, payment_data, 'failed',
+                    failure_reason='Database update failed - user may not exist'
+                )
+                conn.commit()
+
+            # Return 200 to prevent provider retries (we've recorded the attempt)
             return {
-                'statusCode': 500,
-                'body': json.dumps({'error': 'Failed to update subscription'}),
+                'statusCode': 200,
+                'body': json.dumps({
+                    'received': True,
+                    'error': 'Subscription update failed',
+                    'requires_manual_review': True,
+                }),
             }
 
     except Exception as e:
         logger.exception(f"Error processing webhook: {e}")
+
+        # Try to record the failure for debugging
+        if payment_data and conn:
+            try:
+                with conn.cursor() as cursor:
+                    record_payment_attempt(
+                        cursor, payment_data, 'failed',
+                        failure_reason=str(e),
+                        raw_payload=json.loads(raw_body) if raw_body else None
+                    )
+                    conn.commit()
+            except Exception:
+                pass  # Don't fail on failure tracking
+
         return {
             'statusCode': 500,
             'body': json.dumps({'error': 'Internal server error'}),
         }
 
-
-# Import for URL encoding (needed for Twilio API call)
-import urllib.parse
+    finally:
+        if conn:
+            conn.close()

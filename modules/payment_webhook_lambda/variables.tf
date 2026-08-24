@@ -142,6 +142,22 @@ variable "twilio_secret_arn" {
 }
 
 # ==============================================================================
+# Notification Queue Configuration (for failed WhatsApp notifications)
+# ==============================================================================
+
+variable "notification_queue_url" {
+  description = "URL of the SQS queue for failed WhatsApp notification retries"
+  type        = string
+  default     = ""
+}
+
+variable "notification_queue_arn" {
+  description = "ARN of the SQS queue for failed WhatsApp notification retries"
+  type        = string
+  default     = ""
+}
+
+# ==============================================================================
 # API Gateway Permission
 # ==============================================================================
 

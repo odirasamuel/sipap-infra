@@ -130,6 +130,12 @@ variable "base_url" {
   default     = "https://ridhatech.com"
 }
 
+variable "twilio_secret_arn" {
+  description = "ARN of Secrets Manager secret containing Twilio credentials (for grace period reminders)"
+  type        = string
+  default     = ""
+}
+
 # ==============================================================================
 # API Gateway Permission
 # ==============================================================================

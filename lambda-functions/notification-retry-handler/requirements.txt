@@ -1,0 +1,2 @@
+# Notification Retry Handler Lambda Dependencies
+# boto3 is provided by AWS Lambda runtime

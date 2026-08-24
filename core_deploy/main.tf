@@ -780,6 +780,9 @@ module "whatsapp_auth_lambda" {
   sqs_queue_arn       = module.whatsapp_sqs.queue_arn
   base_url            = var.ridhatech_base_url
 
+  # Twilio credentials (for grace period reminders)
+  twilio_secret_arn = var.twilio_secret_arn
+
   # API Gateway permission
   enable_api_gateway_permission = true
   api_gateway_execution_arn     = module.whatsapp_api_gateway.execution_arn
@@ -797,5 +800,86 @@ module "whatsapp_auth_lambda" {
   depends_on = [
     module.whatsapp_sqs,
     module.lambda_internal_security_group
+  ]
+}
+
+# ==============================================================================
+# WHATSAPP NOTIFICATION RETRY QUEUE - For failed payment confirmation messages
+# ==============================================================================
+# NOTE: Created BEFORE payment_webhook_lambda so that the queue URL can be passed
+# to the Lambda. Uses account-level permissions initially; specific role permission
+# can be added later via the payment_webhook_role_arn variable.
+
+module "whatsapp_notification_dlq" {
+  source = "../modules/whatsapp_notification_dlq"
+
+  stack_name = var.stack_name
+  env        = var.env
+
+  # IAM role that can send messages to this queue
+  # Empty initially - account-level access via root is sufficient
+  # Can be updated after payment_webhook_lambda exists
+  payment_webhook_role_arn = ""
+
+  # Twilio credentials for notification retry Lambda
+  twilio_secret_arn = var.twilio_secret_arn
+
+  # Lambda package location
+  lambda_s3_bucket = local.lambda_packages_bucket
+  lambda_s3_key    = "auth-handlers/python_3.13/notification_retry_handler.zip"
+
+  log_retention_days = 14
+
+  additional_tags = var.additional_tags
+}
+
+# ==============================================================================
+# PAYMENT WEBHOOK HANDLER LAMBDA - Handles Stripe, Paystack, Flutterwave webhooks
+# ==============================================================================
+
+module "payment_webhook_lambda" {
+  source = "../modules/payment_webhook_lambda"
+
+  function_name = "${var.stack_name}-${var.env}-payment-webhook-handler"
+  env           = var.env
+
+  # S3-based deployment configuration
+  use_s3_deployment = true
+  s3_bucket         = local.lambda_packages_bucket
+  s3_key            = "auth-handlers/python_3.13/payment_webhook_handler.zip"
+  s3_object_version = data.aws_s3_object.payment_webhook_function.version_id
+
+  # VPC Configuration (Aurora access)
+  private_subnet_ids = local.private_subnet_ids
+  security_group_ids = [module.lambda_internal_security_group.security_group_id]
+
+  # Database credentials
+  postgres_secret_arn = local.postgres_credentials_arn
+
+  # Payment provider credentials
+  stripe_webhook_secret      = var.stripe_webhook_secret
+  paystack_secret_key        = var.paystack_secret_key
+  flutterwave_webhook_secret = var.flutterwave_webhook_secret
+
+  # Twilio credentials for WhatsApp confirmation messages
+  twilio_secret_arn = var.twilio_secret_arn
+
+  # Notification queue (for failed WhatsApp messages)
+  notification_queue_url = module.whatsapp_notification_dlq.retry_queue_url
+  notification_queue_arn = module.whatsapp_notification_dlq.retry_queue_arn
+
+  # Runtime configuration
+  lambda_runtime     = "python3.13"
+  lambda_timeout     = 30
+  lambda_memory_size = 256
+
+  additional_tags = merge(var.additional_tags, {
+    Service     = "payment-webhook"
+    PackageETag = data.aws_s3_object.payment_webhook_function.etag
+  })
+
+  depends_on = [
+    module.lambda_internal_security_group,
+    module.whatsapp_notification_dlq
   ]
 }

@@ -60,11 +60,12 @@ resource "aws_lambda_function" "payment_webhook" {
 
   environment {
     variables = merge(var.environment_variables, {
-      POSTGRES_SECRET_ARN        = var.postgres_secret_arn
-      STRIPE_WEBHOOK_SECRET      = var.stripe_webhook_secret
-      PAYSTACK_SECRET_KEY        = var.paystack_secret_key
-      FLUTTERWAVE_WEBHOOK_SECRET = var.flutterwave_webhook_secret
-      TWILIO_SECRET_ARN          = var.twilio_secret_arn
+      POSTGRES_SECRET_ARN              = var.postgres_secret_arn
+      STRIPE_WEBHOOK_SECRET            = var.stripe_webhook_secret
+      PAYSTACK_SECRET_KEY              = var.paystack_secret_key
+      FLUTTERWAVE_WEBHOOK_SECRET       = var.flutterwave_webhook_secret
+      TWILIO_SECRET_ARN                = var.twilio_secret_arn
+      WHATSAPP_NOTIFICATION_QUEUE_URL  = var.notification_queue_url
     })
   }
 
@@ -121,26 +122,39 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# Custom policy for Secrets Manager access
+# Custom policy for Secrets Manager and SQS access
 resource "aws_iam_role_policy" "lambda_custom" {
   name = "${var.function_name}-custom-policy"
   role = aws_iam_role.lambda_execution.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "SecretsManagerAccess"
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Resource = compact([
-          var.postgres_secret_arn,
-          var.twilio_secret_arn
-        ])
-      }
-    ]
+    Statement = concat(
+      [
+        {
+          Sid    = "SecretsManagerAccess"
+          Effect = "Allow"
+          Action = [
+            "secretsmanager:GetSecretValue"
+          ]
+          Resource = compact([
+            var.postgres_secret_arn,
+            var.twilio_secret_arn
+          ])
+        }
+      ],
+      # Conditionally add SQS permission if notification queue is configured
+      var.notification_queue_arn != "" ? [
+        {
+          Sid    = "SQSNotificationQueueAccess"
+          Effect = "Allow"
+          Action = [
+            "sqs:SendMessage"
+          ]
+          Resource = var.notification_queue_arn
+        }
+      ] : []
+    )
   })
 }
 

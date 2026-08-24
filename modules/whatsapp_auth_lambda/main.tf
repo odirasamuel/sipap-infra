@@ -63,6 +63,7 @@ resource "aws_lambda_function" "whatsapp_auth" {
       POSTGRES_SECRET_ARN = var.postgres_secret_arn
       SQS_QUEUE_URL       = var.sqs_queue_url
       BASE_URL            = var.base_url
+      TWILIO_SECRET_ARN   = var.twilio_secret_arn
     })
   }
 
@@ -133,9 +134,10 @@ resource "aws_iam_role_policy" "lambda_custom" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = [
-          var.postgres_secret_arn
-        ]
+        Resource = compact([
+          var.postgres_secret_arn,
+          var.twilio_secret_arn
+        ])
       },
       {
         Sid    = "SQSSendMessage"

@@ -202,3 +202,27 @@ output "orchestrator_security_group_id" {
   description = "Security group ID for orchestrator ECS service"
   value       = module.orchestrator_security_group.security_group_id
 }
+
+# ==============================================================================
+# WhatsApp Auth Lambda Outputs
+# ==============================================================================
+
+output "whatsapp_auth_function_name" {
+  description = "Name of the WhatsApp auth handler Lambda function"
+  value       = module.whatsapp_auth_lambda.function_name
+}
+
+output "whatsapp_auth_function_arn" {
+  description = "ARN of the WhatsApp auth handler Lambda function"
+  value       = module.whatsapp_auth_lambda.function_arn
+}
+
+output "whatsapp_auth_log_group_name" {
+  description = "CloudWatch log group name for WhatsApp auth handler"
+  value       = module.whatsapp_auth_lambda.log_group_name
+}
+
+output "whatsapp_auth_enabled" {
+  description = "Whether WhatsApp authentication is enabled (API Gateway routes through Lambda)"
+  value       = var.enable_whatsapp_auth
+}

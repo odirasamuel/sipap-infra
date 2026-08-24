@@ -80,6 +80,53 @@ variable "enable_timeout_metric_filter" {
 }
 
 # ==============================================================================
+# WhatsApp Auth Configuration
+# ==============================================================================
+
+variable "enable_whatsapp_auth" {
+  description = "Enable WhatsApp authentication Lambda (routes API Gateway through auth handler before SQS)"
+  type        = bool
+  default     = false
+}
+
+variable "ridhatech_base_url" {
+  description = "Base URL for RidhaTech website (used in signup/renewal links)"
+  type        = string
+  default     = "https://ridhatech.com"
+}
+
+# ==============================================================================
+# Payment Provider Configuration
+# ==============================================================================
+
+variable "stripe_webhook_secret" {
+  description = "Stripe webhook signing secret for verifying webhook signatures"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "paystack_secret_key" {
+  description = "Paystack secret key for webhook verification"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "flutterwave_webhook_secret" {
+  description = "Flutterwave webhook secret (verif-hash header value)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "twilio_secret_arn" {
+  description = "ARN of Secrets Manager secret containing Twilio credentials"
+  type        = string
+  default     = ""
+}
+
+# ==============================================================================
 # Tags
 # ==============================================================================
 
