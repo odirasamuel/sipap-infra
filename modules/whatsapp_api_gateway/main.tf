@@ -49,11 +49,13 @@ resource "aws_api_gateway_method" "webhook_post" {
 }
 
 # ==============================================================================
-# SQS Integration
+# SQS Integration (used when use_lambda_integration = false)
 # ==============================================================================
 
 # Direct AWS service integration with SQS using VTL
 resource "aws_api_gateway_integration" "sqs" {
+  count = var.use_lambda_integration ? 0 : 1
+
   rest_api_id = aws_api_gateway_rest_api.whatsapp.id
   resource_id = aws_api_gateway_resource.webhook.id
   http_method = aws_api_gateway_method.webhook_post.http_method
@@ -79,8 +81,40 @@ resource "aws_api_gateway_integration" "sqs" {
   timeout_milliseconds = 29000
 }
 
-# Method response
+# ==============================================================================
+# Lambda Proxy Integration (used when use_lambda_integration = true)
+# ==============================================================================
+
+# Lambda proxy integration for auth handler
+resource "aws_api_gateway_integration" "lambda" {
+  count = var.use_lambda_integration ? 1 : 0
+
+  rest_api_id = aws_api_gateway_rest_api.whatsapp.id
+  resource_id = aws_api_gateway_resource.webhook.id
+  http_method = aws_api_gateway_method.webhook_post.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+
+  timeout_milliseconds = 29000
+}
+
+# Lambda permission for API Gateway to invoke
+resource "aws_lambda_permission" "api_gateway" {
+  count = var.use_lambda_integration ? 1 : 0
+
+  statement_id  = "AllowAPIGatewayInvoke-${var.stack_name}-${var.env}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.lambda_function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.whatsapp.execution_arn}/*/*"
+}
+
+# Method response (for SQS integration)
 resource "aws_api_gateway_method_response" "webhook_200" {
+  count = var.use_lambda_integration ? 0 : 1
+
   rest_api_id = aws_api_gateway_rest_api.whatsapp.id
   resource_id = aws_api_gateway_resource.webhook.id
   http_method = aws_api_gateway_method.webhook_post.http_method
@@ -96,12 +130,14 @@ resource "aws_api_gateway_method_response" "webhook_200" {
   }
 }
 
-# Integration response
+# Integration response (for SQS integration)
 resource "aws_api_gateway_integration_response" "webhook_200" {
+  count = var.use_lambda_integration ? 0 : 1
+
   rest_api_id = aws_api_gateway_rest_api.whatsapp.id
   resource_id = aws_api_gateway_resource.webhook.id
   http_method = aws_api_gateway_method.webhook_post.http_method
-  status_code = aws_api_gateway_method_response.webhook_200.status_code
+  status_code = aws_api_gateway_method_response.webhook_200[0].status_code
 
   response_parameters = {
     "method.response.header.Content-Type" = "'text/xml'"
@@ -133,22 +169,22 @@ resource "aws_api_gateway_deployment" "whatsapp" {
   # Trigger new deployment when method or integration configuration changes
   # Use full resource content, not just IDs, to detect config changes
   triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_method.webhook_post,
-      aws_api_gateway_integration.sqs,
-      aws_api_gateway_integration_response.webhook_200,
-      aws_api_gateway_method_response.webhook_200
-    ]))
+    redeployment = sha1(jsonencode({
+      method      = aws_api_gateway_method.webhook_post
+      integration = var.use_lambda_integration ? aws_api_gateway_integration.lambda[0].id : aws_api_gateway_integration.sqs[0].id
+      response    = var.use_lambda_integration ? "lambda-proxy" : aws_api_gateway_integration_response.webhook_200[0].id
+    }))
   }
 
   # Add description with hash to ensure deployment is actually created
-  description = "Deployment triggered by config hash: ${sha1(jsonencode([
-    aws_api_gateway_integration_response.webhook_200.response_parameters,
-    aws_api_gateway_integration_response.webhook_200.response_templates
+  description = var.use_lambda_integration ? "Lambda proxy integration deployment" : "Deployment triggered by config hash: ${sha1(jsonencode([
+    aws_api_gateway_integration_response.webhook_200[0].response_parameters,
+    aws_api_gateway_integration_response.webhook_200[0].response_templates
   ]))}"
 
   depends_on = [
     aws_api_gateway_integration.sqs,
+    aws_api_gateway_integration.lambda,
     aws_api_gateway_integration_response.webhook_200,
     aws_api_gateway_method_response.webhook_200
   ]
