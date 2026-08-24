@@ -1,7 +1,7 @@
 """Fix subscription_events schema and add payment infrastructure
 
 Revision ID: 20260824_014
-Revises: 20260823_013
+Revises: 20260815_012
 Create Date: 2026-08-24
 
 CRITICAL FIX: The payment webhook handler tries to INSERT columns that don't exist:
@@ -30,7 +30,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 # revision identifiers, used by Alembic.
 revision = '20260824_014'
-down_revision = '20260823_013'
+down_revision = '20260815_012'
 branch_labels = None
 depends_on = None
 
