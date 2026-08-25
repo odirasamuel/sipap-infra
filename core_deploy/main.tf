@@ -868,6 +868,9 @@ module "payment_webhook_lambda" {
   notification_queue_url = module.whatsapp_notification_dlq.retry_queue_url
   notification_queue_arn = module.whatsapp_notification_dlq.retry_queue_arn
 
+  # API Gateway permission
+  api_gateway_execution_arn = module.whatsapp_api_gateway.execution_arn
+
   # Runtime configuration
   lambda_runtime     = "python3.13"
   lambda_timeout     = 30

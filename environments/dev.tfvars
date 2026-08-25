@@ -26,6 +26,7 @@ elasticache_node_type      = "cache.t4g.micro"  # ~$13/mo vs Serverless ~$24/mo
 
 data_mcp_token_arn         = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/data-mcp-tokens-5rg9Q5"
 intelligence_mcp_token_arn = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/intelligence-mcp-tokens-bdKsAA"
+twilio_secret_arn          = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/twilio-credentials-tngBnx"
 
 # Database and cache endpoints (from parent terraform output)
 redis_endpoint           = "sipap-dev-redis.qnk6bl.0001.use1.cache.amazonaws.com"
