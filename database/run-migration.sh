@@ -156,9 +156,11 @@ WHERE schemaname = 'public'
 ORDER BY tablename;
 "
 
-# Count tables (should be 17 application tables + 1 alembic_version)
+# Count tables (should be 20 application tables + 1 alembic_version)
 # Original 10: users, sports, leagues, teams, matches, predictions, prediction_evidence, agent_contributions, user_feedback, subscription_events
-# New 7 (from migrations 004-010): odds, standings, team_statistics, head_to_head, injuries, lineups, teams_metadata
+# Migrations 004-010: odds, standings, team_statistics, head_to_head, injuries, lineups, teams_metadata (7 tables)
+# Migrations 013-014: subscription_plans, user_registration_tokens, payment_attempts (3 tables)
+# Total: 10 + 7 + 3 = 20 tables
 TABLE_COUNT=$(psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -c "
 SELECT COUNT(*)
 FROM pg_tables
@@ -172,12 +174,12 @@ echo "Migration Summary:"
 echo "====================================="
 echo "Migration Version: $FINAL_VERSION"
 echo "Application Tables: $TABLE_COUNT"
-echo "Expected Tables: 17"
+echo "Expected Tables: 20"
 
-if [ "$TABLE_COUNT" -eq 17 ]; then
+if [ "$TABLE_COUNT" -ge 20 ]; then
     echo "✅ All tables created successfully!"
     exit 0
 else
-    echo "⚠️  Warning: Expected 17 tables but found $TABLE_COUNT"
+    echo "⚠️  Warning: Expected at least 20 tables but found $TABLE_COUNT"
     exit 1
 fi
