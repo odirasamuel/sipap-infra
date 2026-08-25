@@ -30,3 +30,8 @@ output "stage_name" {
   description = "Name of the API Gateway stage"
   value       = aws_api_gateway_stage.prod.stage_name
 }
+
+output "execution_arn" {
+  description = "Execution ARN of the API Gateway (for Lambda permissions)"
+  value       = aws_api_gateway_rest_api.whatsapp.execution_arn
+}

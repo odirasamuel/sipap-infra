@@ -1,4 +1,4 @@
-# SIPAP Database Migration System
+# Valo Database Migration System
 
 ## Table of Contents
 1. [What is Database Migration?](#what-is-database-migration)
@@ -16,7 +16,7 @@
 
 ## What is Database Migration?
 
-**Database migration** is the process of moving data, schema, or configuration from one database state to another. In SIPAP's context, migrations are used to:
+**Database migration** is the process of moving data, schema, or configuration from one database state to another. In Valo's context, migrations are used to:
 
 - **Create initial database schema** (tables, indexes, constraints)
 - **Seed reference data** (sports, leagues, markets, bet types)
@@ -49,7 +49,7 @@ Migrations provide:
 - **Team collaboration** - everyone works with the same schema
 
 ### 4. **Safe Schema Evolution**
-As SIPAP grows, we'll need to:
+As Valo grows, we'll need to:
 - Add new tables (e.g., `user_subscriptions`, `payment_history`)
 - Modify existing tables (e.g., add `confidence_interval` column to `predictions`)
 - Update reference data (e.g., add new sports like Rugby, Tennis)
@@ -60,7 +60,7 @@ Migrations make this **safe, predictable, and reversible**.
 
 ## Alembic: Version-Controlled Migrations
 
-**Since 2026-06-14**, SIPAP uses [Alembic](https://alembic.sqlalchemy.org/) for database migrations — bringing Git-like version control to our database schema.
+**Since 2026-06-14**, Valo uses [Alembic](https://alembic.sqlalchemy.org/) for database migrations — bringing Git-like version control to our database schema.
 
 ### What is Alembic?
 
@@ -146,7 +146,7 @@ See **[ALEMBIC-GUIDE.md](./ALEMBIC-GUIDE.md)** for:
 
 ## Migration Architecture
 
-SIPAP uses a **containerized migration system** running on **ECS Fargate** for secure, repeatable deployments.
+Valo uses a **containerized migration system** running on **ECS Fargate** for secure, repeatable deployments.
 
 ### Architecture Diagram
 
@@ -661,7 +661,7 @@ aws ecs describe-tasks \
 4. **Run Task**:
    - Launch type: `FARGATE`
    - Cluster: `sipap-dev-cluster`
-   - VPC: Select SIPAP VPC
+   - VPC: Select Valo VPC
    - Subnets: Select **private subnets**
    - Security group: `ecs_tasks_sg`
    - Auto-assign public IP: `DISABLED`
@@ -672,7 +672,7 @@ aws ecs describe-tasks \
 
 ## Creating New Migrations
 
-As SIPAP evolves, you'll need to create new migrations for schema changes. Here's a quick guide.
+As Valo evolves, you'll need to create new migrations for schema changes. Here's a quick guide.
 
 ### Step 1: Create Migration File
 

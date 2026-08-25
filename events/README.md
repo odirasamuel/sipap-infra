@@ -1,4 +1,4 @@
-# SIPAP Batch Scraper Events Infrastructure
+# Valo Batch Scraper Events Infrastructure
 
 This directory contains Terraform configuration for deploying scheduled batch scraper jobs using Lambda, ECS Fargate, and EventBridge.
 

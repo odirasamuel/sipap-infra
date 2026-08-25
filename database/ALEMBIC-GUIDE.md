@@ -1,4 +1,4 @@
-# Alembic Migration Guide for SIPAP
+# Alembic Migration Guide for Valo
 
 **Version-Controlled Database Schema Evolution**
 

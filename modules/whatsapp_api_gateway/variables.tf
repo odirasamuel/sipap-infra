@@ -69,3 +69,22 @@ variable "additional_tags" {
   type        = map(string)
   default     = {}
 }
+
+# Lambda Integration Variables (for auth handler)
+variable "use_lambda_integration" {
+  description = "Use Lambda proxy integration instead of direct SQS integration"
+  type        = bool
+  default     = false
+}
+
+variable "lambda_invoke_arn" {
+  description = "Invoke ARN of the Lambda function for proxy integration"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_function_name" {
+  description = "Name of the Lambda function for resource-based policy"
+  type        = string
+  default     = ""
+}

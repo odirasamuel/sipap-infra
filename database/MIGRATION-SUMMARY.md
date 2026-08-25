@@ -210,7 +210,7 @@ ecs_services = [
 - ✅ ECS services run from ECR (not local builds)
 - ✅ Terraform manages infrastructure, GitHub Actions manages images
 
-### SIPAP's Approach (Aligned)
+### Valo's Approach (Aligned)
 
 ```hcl
 # migrations.tf
@@ -238,7 +238,7 @@ resource "aws_ecs_task_definition" "migrations" {
 - ✅ Terraform manages infrastructure
 - ✅ Manual ECS task execution (one-time setup vs. long-running service)
 
-**Difference**: Sentinel runs services (desired_count = 2), SIPAP runs one-off tasks (desired_count = 0, manual execution).
+**Difference**: Sentinel runs services (desired_count = 2), Valo runs one-off tasks (desired_count = 0, manual execution).
 
 ---
 
@@ -322,7 +322,7 @@ aws logs tail /ecs/sipap-dev-migrations \
 **Expected Result**:
 ```
 =====================================
-SIPAP Database Migration Script
+Valo Database Migration Script
 =====================================
 Database Host: sipap-dev-rds.c2hooq6iskvw.us-east-1.rds.amazonaws.com
 Database Name: sipap_dev

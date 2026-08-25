@@ -435,7 +435,7 @@ psql -c "SELECT COUNT(*) FROM pg_indexes WHERE schemaname = 'public'"
 
 **Version:** 1.0
 **Created:** 2026-08-06
-**Author:** SIPAP Development Team
+**Author:** Valo Development Team
 **Status:** Migrations Created - Ready for Testing
 
 ---

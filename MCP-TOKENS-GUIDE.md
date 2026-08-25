@@ -1,8 +1,8 @@
-# SIPAP MCP Token Guide
+# Valo MCP Token Guide
 
 ## Overview
 
-Each SIPAP MCP server requires bearer token authentication. This guide explains token metadata fields and how to create/manage tokens.
+Each Valo MCP server requires bearer token authentication. This guide explains token metadata fields and how to create/manage tokens.
 
 ---
 
@@ -26,7 +26,7 @@ Each SIPAP MCP server requires bearer token authentication. This guide explains 
   - `["admin"]` - Full access to all tools (orchestrator, internal services)
   - `["user"]` - Standard access (web apps, external APIs)
   - `["readonly"]` - Read-only access, no mutations
-- **SIPAP Usage**:
+- **Valo Usage**:
   ```json
   {
     "orchestrator": ["admin"],
@@ -42,7 +42,7 @@ Each SIPAP MCP server requires bearer token authentication. This guide explains 
   - `["internal"]` - Backend systems, trusted services
   - `["external"]` - Public APIs, webhooks
   - `["test"]` - Testing/staging environments
-- **SIPAP Usage**:
+- **Valo Usage**:
   ```json
   {
     "orchestrator": ["internal"],
@@ -60,7 +60,7 @@ Each SIPAP MCP server requires bearer token authentication. This guide explains 
   - `["emergency-access"]` - Temporary elevated permissions
   - `["read-only-mode"]` - Maintenance mode
   - `["beta-features"]` - Feature flag access
-- **SIPAP Usage**: Currently unused (MVP), reserved for future
+- **Valo Usage**: Currently unused (MVP), reserved for future
 
 #### 5. **email** (string)
 - **Purpose**: Contact/identification for audit logs
@@ -122,7 +122,7 @@ Scenario 3: No Match
 
 ---
 
-## SIPAP MVP Token Strategy
+## Valo MVP Token Strategy
 
 For the MVP, we use a **simplified approach**:
 

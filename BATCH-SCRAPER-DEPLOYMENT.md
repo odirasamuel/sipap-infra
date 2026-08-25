@@ -46,7 +46,7 @@ This follows the Sentinel pattern where events/batch jobs are separate from core
 
 ### 1. AWS Resources (Already Deployed via Root Terraform)
 
-The main SIPAP infrastructure must already be deployed:
+The main Valo infrastructure must already be deployed:
 - ✅ VPC with public/private subnets
 - ✅ Security groups
 - ✅ Aurora PostgreSQL cluster
@@ -173,7 +173,7 @@ terraform output github_actions_role_arn
 ```
 
 Add this ARN as a secret to the sipap-batch-scraper repository:
-- Secret name: `SIPAP_DEV_AWS_ROLE_ARN`
+- Secret name: `Valo_DEV_AWS_ROLE_ARN`
 - Secret value: (ARN from terraform output)
 
 ### Step 4: Trigger Automated Builds (GitHub Actions)
@@ -317,7 +317,7 @@ aws logs tail /ecs/sipap-dev-daily-harvest --follow --profile odiraaws --region 
 ### Step 8: Verify EventBridge Schedules
 
 ```bash
-# List all SIPAP EventBridge rules
+# List all Valo EventBridge rules
 aws events list-rules --name-prefix sipap-dev- --profile odiraaws --region us-east-1
 
 # Check specific rule targets
@@ -556,7 +556,7 @@ terraform destroy
 - [ ] API keys obtained from Football-Data.org and The Odds API
 - [ ] API keys secret populated via AWS CLI with profile `odiraaws`
 - [ ] CI/CD infrastructure deployed (`sipap-terraform/cicd_infra/`)
-- [ ] GitHub secret `SIPAP_DEV_AWS_ROLE_ARN` configured
+- [ ] GitHub secret `Valo_DEV_AWS_ROLE_ARN` configured
 
 **Automated Deployment:**
 - [ ] Code pushed to main branch (triggers GitHub Actions)

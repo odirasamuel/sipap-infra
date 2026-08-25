@@ -1,10 +1,10 @@
-# SIPAP Terraform Infrastructure
+# Valo Terraform Infrastructure
 
 AWS infrastructure for Sports Intelligence Platform and Outcome Probability Assessment Platform.
 
 ## Overview
 
-This repository contains Terraform configuration for deploying SIPAP infrastructure on AWS, following Sentinel's proven modular patterns.
+This repository contains Terraform configuration for deploying Valo infrastructure on AWS, following Sentinel's proven modular patterns.
 
 ## Architecture
 
@@ -242,7 +242,7 @@ terraform destroy -var-file=environments/dev.tfvars
 
 - **Plan**: `~/.claude/plans/luminous-kindling-cray.md`
 - **Sentinel Terraform**: `./repos/sentinel-terraform-master/sentinel_gce/`
-- **SIPAP Architecture**: `./sipap/technical-architecture-v2.md`
+- **Valo Architecture**: `./sipap/technical-architecture-v2.md`
 
 ## Support
 
