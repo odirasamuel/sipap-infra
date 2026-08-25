@@ -77,7 +77,7 @@ def upgrade() -> None:
         sa.Column('price_usd_cents', sa.Integer(), nullable=False),  # 200 = $2, 500 = $5
         sa.Column('duration_days', sa.Integer(), server_default='7', nullable=False),
         sa.Column('message_limit', sa.Integer(), nullable=True),  # NULL = unlimited
-        sa.Column('features', JSONB(), server_default="'[]'::jsonb", nullable=False),
+        sa.Column('features', JSONB(), server_default=sa.text("'[]'::jsonb"), nullable=False),
         sa.Column('is_active', sa.Boolean(), server_default='true', nullable=False),
         sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
         sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
