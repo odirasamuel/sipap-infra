@@ -58,6 +58,18 @@ data "aws_s3_object" "payment_session_function" {
   key    = "auth-handlers/python_3.13/payment_session_handler.zip"
 }
 
+# Subscription Reminder Handler Function Code
+data "aws_s3_object" "subscription_reminder_function" {
+  bucket = "sipap-lambda-packages-dev"
+  key    = "auth-handlers/python_3.13/subscription_reminder_handler.zip"
+}
+
+# Token Validator Handler Function Code
+data "aws_s3_object" "token_validator_function" {
+  bucket = "sipap-lambda-packages-dev"
+  key    = "auth-handlers/python_3.13/token_validator_handler.zip"
+}
+
 # API Keys Secret (contains API_FOOTBALL_KEY)
 data "aws_secretsmanager_secret_version" "api_keys" {
   secret_id = data.terraform_remote_state.base.outputs.api_keys_secret_arn
@@ -1107,5 +1119,298 @@ resource "aws_api_gateway_deployment" "payment_routes" {
     # Payment webhook dependencies
     aws_api_gateway_method.payment_webhook_post,
     aws_api_gateway_integration.payment_webhook_lambda,
+  ]
+}
+
+# ==============================================================================
+# SUBSCRIPTION REMINDER HANDLER LAMBDA - Scheduled expiration reminders
+# ==============================================================================
+
+module "subscription_reminder_lambda" {
+  source = "../modules/subscription_reminder_lambda"
+
+  function_name = "${var.stack_name}-${var.env}-subscription-reminder-handler"
+  env           = var.env
+
+  # S3-based deployment configuration
+  s3_bucket        = local.lambda_packages_bucket
+  s3_key           = "auth-handlers/python_3.13/subscription_reminder_handler.zip"
+  source_code_hash = data.aws_s3_object.subscription_reminder_function.etag
+
+  # VPC Configuration (Aurora access)
+  private_subnet_ids = local.private_subnet_ids
+  security_group_ids = [module.lambda_internal_security_group.security_group_id]
+
+  # Database and Twilio credentials
+  postgres_secret_arn = local.postgres_credentials_arn
+  twilio_secret_arn   = var.twilio_secret_arn
+
+  # Application configuration
+  base_url   = var.ridhatech_base_url
+  batch_size = 100
+
+  # Schedule: Run every hour
+  schedule_expression = "rate(1 hour)"
+
+  # Runtime configuration
+  lambda_runtime     = "python3.13"
+  lambda_timeout     = 120
+  lambda_memory_size = 256
+
+  additional_tags = merge(var.additional_tags, {
+    Service     = "subscription-reminder"
+    PackageETag = data.aws_s3_object.subscription_reminder_function.etag
+  })
+
+  depends_on = [
+    module.lambda_internal_security_group
+  ]
+}
+
+# ==============================================================================
+# TOKEN VALIDATOR HANDLER LAMBDA - Registration token validation
+# ==============================================================================
+
+module "token_validator_lambda" {
+  source = "../modules/token_validator_lambda"
+
+  function_name = "${var.stack_name}-${var.env}-token-validator-handler"
+  env           = var.env
+
+  # S3-based deployment configuration
+  s3_bucket        = local.lambda_packages_bucket
+  s3_key           = "auth-handlers/python_3.13/token_validator_handler.zip"
+  source_code_hash = data.aws_s3_object.token_validator_function.etag
+
+  # VPC Configuration (Aurora access)
+  private_subnet_ids = local.private_subnet_ids
+  security_group_ids = [module.lambda_internal_security_group.security_group_id]
+
+  # Database credentials
+  postgres_secret_arn = local.postgres_credentials_arn
+
+  # API Gateway permission
+  enable_api_gateway_permission = true
+  api_gateway_execution_arn     = module.whatsapp_api_gateway.execution_arn
+
+  # Runtime configuration
+  lambda_runtime     = "python3.13"
+  lambda_timeout     = 30
+  lambda_memory_size = 256
+
+  additional_tags = merge(var.additional_tags, {
+    Service     = "token-validator"
+    PackageETag = data.aws_s3_object.token_validator_function.etag
+  })
+
+  depends_on = [
+    module.lambda_internal_security_group
+  ]
+}
+
+# ==============================================================================
+# AUTH API GATEWAY RESOURCES - /auth/validate-token and /auth/user-status
+# ==============================================================================
+
+# /auth resource
+resource "aws_api_gateway_resource" "auth" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  parent_id   = module.whatsapp_api_gateway.root_resource_id
+  path_part   = "auth"
+}
+
+# /auth/validate-token resource
+resource "aws_api_gateway_resource" "validate_token" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  parent_id   = aws_api_gateway_resource.auth.id
+  path_part   = "validate-token"
+}
+
+# /auth/user-status resource
+resource "aws_api_gateway_resource" "user_status" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  parent_id   = aws_api_gateway_resource.auth.id
+  path_part   = "user-status"
+}
+
+# OPTIONS method for CORS preflight - /auth/validate-token
+resource "aws_api_gateway_method" "validate_token_options" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.validate_token.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "validate_token_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.validate_token.id
+  http_method = aws_api_gateway_method.validate_token_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "validate_token_options_200" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.validate_token.id
+  http_method = aws_api_gateway_method.validate_token_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "validate_token_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.validate_token.id
+  http_method = aws_api_gateway_method.validate_token_options.http_method
+  status_code = aws_api_gateway_method_response.validate_token_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
+# GET /auth/validate-token method
+resource "aws_api_gateway_method" "validate_token_get" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.validate_token.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "validate_token_lambda" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.validate_token.id
+  http_method = aws_api_gateway_method.validate_token_get.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = module.token_validator_lambda.invoke_arn
+
+  timeout_milliseconds = 29000
+}
+
+# OPTIONS method for CORS preflight - /auth/user-status
+resource "aws_api_gateway_method" "user_status_options" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.user_status.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "user_status_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.user_status.id
+  http_method = aws_api_gateway_method.user_status_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "user_status_options_200" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.user_status.id
+  http_method = aws_api_gateway_method.user_status_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "user_status_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.user_status.id
+  http_method = aws_api_gateway_method.user_status_options.http_method
+  status_code = aws_api_gateway_method_response.user_status_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
+# GET /auth/user-status method
+resource "aws_api_gateway_method" "user_status_get" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.user_status.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "user_status_lambda" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.user_status.id
+  http_method = aws_api_gateway_method.user_status_get.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = module.token_validator_lambda.invoke_arn
+
+  timeout_milliseconds = 29000
+}
+
+# Lambda permission for API Gateway to invoke token validator
+resource "aws_lambda_permission" "token_validator_api_gateway" {
+  statement_id  = "AllowAPIGatewayInvoke-TokenValidator"
+  action        = "lambda:InvokeFunction"
+  function_name = module.token_validator_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${module.whatsapp_api_gateway.execution_arn}/*/*"
+}
+
+# Redeploy API Gateway to include auth routes
+resource "aws_api_gateway_deployment" "auth_routes" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+
+  stage_name  = "prod"
+  description = "Deployment with auth routes"
+
+  triggers = {
+    redeployment = sha1(jsonencode([
+      # Auth routes
+      aws_api_gateway_resource.auth.id,
+      aws_api_gateway_resource.validate_token.id,
+      aws_api_gateway_resource.user_status.id,
+      aws_api_gateway_method.validate_token_get.id,
+      aws_api_gateway_method.validate_token_options.id,
+      aws_api_gateway_integration.validate_token_lambda.id,
+      aws_api_gateway_integration.validate_token_options.id,
+      aws_api_gateway_method.user_status_get.id,
+      aws_api_gateway_method.user_status_options.id,
+      aws_api_gateway_integration.user_status_lambda.id,
+      aws_api_gateway_integration.user_status_options.id,
+    ]))
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  depends_on = [
+    aws_api_gateway_deployment.payment_routes,
+    aws_api_gateway_method.validate_token_get,
+    aws_api_gateway_method.validate_token_options,
+    aws_api_gateway_integration.validate_token_lambda,
+    aws_api_gateway_integration.validate_token_options,
+    aws_api_gateway_integration_response.validate_token_options,
+    aws_api_gateway_method.user_status_get,
+    aws_api_gateway_method.user_status_options,
+    aws_api_gateway_integration.user_status_lambda,
+    aws_api_gateway_integration.user_status_options,
+    aws_api_gateway_integration_response.user_status_options,
   ]
 }
