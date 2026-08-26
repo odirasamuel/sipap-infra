@@ -1024,9 +1024,17 @@ resource "aws_lambda_permission" "payment_session_api_gateway" {
   source_arn    = "${module.whatsapp_api_gateway.execution_arn}/*/*"
 }
 
-# Redeploy API Gateway to include new routes
+# Redeploy API Gateway to include new payment routes
+# This deployment updates the prod stage with the new routes
 resource "aws_api_gateway_deployment" "payment_routes" {
   rest_api_id = module.whatsapp_api_gateway.rest_api_id
+
+  # Associate this deployment with the existing prod stage
+  # This updates the stage to include the new payment routes
+  # Note: stage_name is deprecated but aws_api_gateway_stage would conflict
+  # with the one in the module. This approach works by updating the existing stage.
+  stage_name  = "prod"
+  description = "Deployment with payment routes"
 
   triggers = {
     redeployment = sha1(jsonencode([
@@ -1034,6 +1042,8 @@ resource "aws_api_gateway_deployment" "payment_routes" {
       aws_api_gateway_resource.create_session.id,
       aws_api_gateway_method.create_session_post.id,
       aws_api_gateway_integration.create_session_lambda.id,
+      aws_api_gateway_method.create_session_options.id,
+      aws_api_gateway_integration.create_session_options.id,
     ]))
   }
 

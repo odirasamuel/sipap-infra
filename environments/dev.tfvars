@@ -28,6 +28,7 @@ data_mcp_token_arn         = "arn:aws:secretsmanager:us-east-1:810278669998:secr
 intelligence_mcp_token_arn = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/intelligence-mcp-tokens-bdKsAA"
 twilio_secret_arn          = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/twilio-credentials-tngBnx"
 flutterwave_secret_arn     = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/flutterwave-credentials-KGYrZJ"
+flutterwave_webhook_secret = "valo_flw_webhook_secret_2026"
 
 # Database and cache endpoints (from parent terraform output)
 redis_endpoint           = "sipap-dev-redis.qnk6bl.0001.use1.cache.amazonaws.com"

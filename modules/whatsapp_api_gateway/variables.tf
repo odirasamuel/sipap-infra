@@ -88,3 +88,9 @@ variable "lambda_function_name" {
   type        = string
   default     = ""
 }
+
+variable "additional_deployment_triggers" {
+  description = "Additional trigger values for deployment redeployment (e.g., from external API Gateway routes). When these values change, the deployment will be recreated."
+  type        = map(string)
+  default     = {}
+}

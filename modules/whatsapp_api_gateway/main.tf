@@ -168,13 +168,17 @@ resource "aws_api_gateway_deployment" "whatsapp" {
 
   # Trigger new deployment when method or integration configuration changes
   # Use full resource content, not just IDs, to detect config changes
-  triggers = {
-    redeployment = sha1(jsonencode({
-      method      = aws_api_gateway_method.webhook_post
-      integration = var.use_lambda_integration ? aws_api_gateway_integration.lambda[0].id : aws_api_gateway_integration.sqs[0].id
-      response    = var.use_lambda_integration ? "lambda-proxy" : aws_api_gateway_integration_response.webhook_200[0].id
-    }))
-  }
+  # Also include any additional triggers from external routes (e.g., payment routes)
+  triggers = merge(
+    {
+      redeployment = sha1(jsonencode({
+        method      = aws_api_gateway_method.webhook_post
+        integration = var.use_lambda_integration ? aws_api_gateway_integration.lambda[0].id : aws_api_gateway_integration.sqs[0].id
+        response    = var.use_lambda_integration ? "lambda-proxy" : aws_api_gateway_integration_response.webhook_200[0].id
+      }))
+    },
+    var.additional_deployment_triggers
+  )
 
   # Add description with hash to ensure deployment is actually created
   description = var.use_lambda_integration ? "Lambda proxy integration deployment" : "Deployment triggered by config hash: ${sha1(jsonencode([
@@ -224,6 +228,12 @@ resource "aws_api_gateway_stage" "prod" {
     },
     var.additional_tags
   )
+
+  # Allow external deployments (like payment routes in core_deploy) to update
+  # this stage without Terraform trying to revert to the module's deployment
+  lifecycle {
+    ignore_changes = [deployment_id]
+  }
 }
 
 # ==============================================================================
