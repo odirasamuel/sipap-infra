@@ -214,41 +214,61 @@ def extract_paystack_payment_data(event: dict) -> PaymentData | None:
 
 def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
     """
-    Extract payment data from Flutterwave charge.completed event.
+    Extract payment data from Flutterwave webhook event.
 
-    Flutterwave event structure:
+    Flutterwave sends two different payload structures:
+
+    1. CARD_TRANSACTION (test mode / some live transactions):
+    {
+        "id": 12345678,
+        "txRef": "VALO_1234567890_abc123",  # camelCase
+        "flwRef": "FLW-MOCK-xxxxx",
+        "amount": 2,
+        "currency": "USD",
+        "status": "successful",
+        "customer": {"email": "...", "phone_number": "..."},
+        "meta": {"phone_number": "...", "tier": "basic", "weeks": "1"},
+        "event.type": "CARD_TRANSACTION"
+    }
+
+    2. charge.completed (standard webhook):
     {
         "event": "charge.completed",
         "data": {
-            "id": 12345678,
-            "tx_ref": "VALO_1234567890_abc123",
-            "flw_ref": "FLW-MOCK-xxxxx",
-            "amount": 2,
-            "currency": "USD",
-            "status": "successful",
-            "customer": {
-                "email": "user@example.com",
-                "phone_number": "+2348012345678",
-                "name": "John Doe"
-            },
-            "meta": {
-                "phone_number": "+2348012345678",
-                "tier": "basic",
-                "weeks": "1",
-                "provider": "flutterwave"
-            }
+            "tx_ref": "VALO_...",  # snake_case
+            "flw_ref": "FLW-...",
+            ...
         }
     }
     """
     try:
-        data = event.get('data', {})
-        meta = data.get('meta', {})
-        customer = data.get('customer', {})
+        # Detect payload structure: root-level (CARD_TRANSACTION) or nested (charge.completed)
+        # Root-level has 'txRef' or 'event.type', nested has 'data' object
+        if 'txRef' in event or 'event.type' in event:
+            # Root-level structure (CARD_TRANSACTION)
+            data = event
+            meta = data.get('meta', {})
+            customer = data.get('customer', {})
 
+            # txRef is camelCase in this format
+            reference = data.get('txRef', '') or data.get('flwRef', '')
+        else:
+            # Nested structure (charge.completed)
+            data = event.get('data', {})
+            meta = data.get('meta', {})
+            customer = data.get('customer', {})
+
+            # tx_ref is snake_case in this format
+            reference = data.get('tx_ref', '') or data.get('flw_ref', '')
+
+        # Extract phone number from meta or customer
         phone_number = meta.get('phone_number', '') or customer.get('phone_number', '')
 
+        # Handle weeks as string or int
         weeks_raw = meta.get('weeks', '1')
         weeks = int(weeks_raw) if isinstance(weeks_raw, str) else weeks_raw
+
+        logger.info(f"Flutterwave payment extracted: phone={phone_number}, tier={meta.get('tier', 'basic')}, ref={reference}")
 
         return {
             'phone_number': phone_number,
@@ -257,7 +277,7 @@ def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
             'provider': 'flutterwave',
             'amount_usd': data.get('amount', 0),
             'customer_email': customer.get('email'),
-            'reference': data.get('tx_ref', '') or data.get('flw_ref', ''),
+            'reference': reference,
         }
     except Exception as e:
         logger.error(f"Failed to extract Flutterwave payment data: {e}")
@@ -639,21 +659,25 @@ def handler(event: dict, context) -> dict:
             logger.info(f"Flutterwave webhook payload keys: {list(webhook_event.keys())}")
             logger.info(f"Flutterwave event type: {webhook_event.get('event')} | event.type: {webhook_event.get('event.type')}")
 
-            # Flutterwave uses 'event' field for event type
+            # Flutterwave uses 'event.type' field (not 'event')
+            # Valid event types: CARD_TRANSACTION, charge.completed
             event_type = webhook_event.get('event') or webhook_event.get('event.type')
-            if event_type != 'charge.completed':
+            valid_events = ['charge.completed', 'CARD_TRANSACTION']
+            if event_type not in valid_events:
                 logger.info(f"Ignoring Flutterwave event: {event_type}")
                 return {
                     'statusCode': 200,
                     'body': json.dumps({'received': True}),
                 }
 
-            event_data = webhook_event.get('data', {})
-            if event_data.get('status') != 'successful':
-                logger.info(f"Ignoring Flutterwave payment with status: {event_data.get('status')}")
+            # Flutterwave sends data at root level (not nested in 'data')
+            # Check status - can be 'successful' or 'success'
+            status = webhook_event.get('status', '').lower()
+            if status not in ['successful', 'success']:
+                logger.info(f"Ignoring Flutterwave payment with status: {status}")
                 return {
                     'statusCode': 200,
-                    'body': json.dumps({'received': True, 'status': event_data.get('status')}),
+                    'body': json.dumps({'received': True, 'status': status}),
                 }
 
             payment_data = extract_flutterwave_payment_data(webhook_event)
