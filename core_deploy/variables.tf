@@ -120,6 +120,12 @@ variable "flutterwave_webhook_secret" {
   default     = ""
 }
 
+variable "flutterwave_secret_arn" {
+  description = "ARN of Secrets Manager secret containing Flutterwave API credentials"
+  type        = string
+  default     = ""
+}
+
 variable "twilio_secret_arn" {
   description = "ARN of Secrets Manager secret containing Twilio credentials"
   type        = string

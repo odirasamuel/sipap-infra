@@ -5,6 +5,21 @@ output "api_gateway_id" {
   value       = aws_api_gateway_rest_api.whatsapp.id
 }
 
+output "rest_api_id" {
+  description = "REST API ID (alias for api_gateway_id)"
+  value       = aws_api_gateway_rest_api.whatsapp.id
+}
+
+output "root_resource_id" {
+  description = "Root resource ID of the API Gateway"
+  value       = aws_api_gateway_rest_api.whatsapp.root_resource_id
+}
+
+output "stage_invoke_url" {
+  description = "Base invoke URL of the API Gateway stage (without path)"
+  value       = aws_api_gateway_stage.prod.invoke_url
+}
+
 output "api_gateway_url" {
   description = "Invoke URL of the WhatsApp webhook API Gateway (use for Twilio webhook configuration)"
   value       = "${aws_api_gateway_stage.prod.invoke_url}/webhook"

@@ -52,6 +52,12 @@ data "aws_s3_object" "payment_webhook_function" {
   key    = "auth-handlers/python_3.13/payment_webhook_handler.zip"
 }
 
+# Payment Session Handler Function Code
+data "aws_s3_object" "payment_session_function" {
+  bucket = "sipap-lambda-packages-dev"
+  key    = "auth-handlers/python_3.13/payment_session_handler.zip"
+}
+
 # API Keys Secret (contains API_FOOTBALL_KEY)
 data "aws_secretsmanager_secret_version" "api_keys" {
   secret_id = data.terraform_remote_state.base.outputs.api_keys_secret_arn
@@ -884,5 +890,162 @@ module "payment_webhook_lambda" {
   depends_on = [
     module.lambda_internal_security_group,
     module.whatsapp_notification_dlq
+  ]
+}
+
+# ==============================================================================
+# PAYMENT SESSION HANDLER LAMBDA - Creates Flutterwave checkout sessions
+# ==============================================================================
+
+module "payment_session_lambda" {
+  source = "../modules/payment_session_lambda"
+
+  function_name = "${var.stack_name}-${var.env}-payment-session-handler"
+  env           = var.env
+
+  # S3-based deployment configuration
+  s3_bucket = local.lambda_packages_bucket
+  s3_key    = "auth-handlers/python_3.13/payment_session_handler.zip"
+
+  # Flutterwave credentials
+  flutterwave_secret_arn = var.flutterwave_secret_arn
+
+  # Redirect URL after payment completion
+  redirect_url = "${var.ridhatech_base_url}/payment-success"
+
+  # API Gateway permission
+  enable_api_gateway_permission = true
+  api_gateway_execution_arn     = module.whatsapp_api_gateway.execution_arn
+
+  # Runtime configuration
+  lambda_runtime     = "python3.13"
+  lambda_timeout     = 30
+  lambda_memory_size = 128
+
+  additional_tags = merge(var.additional_tags, {
+    Service     = "payment-session"
+    PackageETag = data.aws_s3_object.payment_session_function.etag
+  })
+}
+
+# ==============================================================================
+# PAYMENT API GATEWAY RESOURCES - /payments/create-session endpoint
+# ==============================================================================
+
+# /payments resource
+resource "aws_api_gateway_resource" "payments" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  parent_id   = module.whatsapp_api_gateway.root_resource_id
+  path_part   = "payments"
+}
+
+# /payments/create-session resource
+resource "aws_api_gateway_resource" "create_session" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  parent_id   = aws_api_gateway_resource.payments.id
+  path_part   = "create-session"
+}
+
+# OPTIONS method for CORS preflight
+resource "aws_api_gateway_method" "create_session_options" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.create_session.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+# OPTIONS mock integration for CORS
+resource "aws_api_gateway_integration" "create_session_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.create_session.id
+  http_method = aws_api_gateway_method.create_session_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+# OPTIONS method response
+resource "aws_api_gateway_method_response" "create_session_options_200" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.create_session.id
+  http_method = aws_api_gateway_method.create_session_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+# OPTIONS integration response
+resource "aws_api_gateway_integration_response" "create_session_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.create_session.id
+  http_method = aws_api_gateway_method.create_session_options.http_method
+  status_code = aws_api_gateway_method_response.create_session_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
+# POST /payments/create-session method
+resource "aws_api_gateway_method" "create_session_post" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.create_session.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+# POST Lambda proxy integration
+resource "aws_api_gateway_integration" "create_session_lambda" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.create_session.id
+  http_method = aws_api_gateway_method.create_session_post.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = module.payment_session_lambda.invoke_arn
+
+  timeout_milliseconds = 29000
+}
+
+# Lambda permission for API Gateway to invoke payment session handler
+resource "aws_lambda_permission" "payment_session_api_gateway" {
+  statement_id  = "AllowAPIGatewayInvoke-PaymentSession"
+  action        = "lambda:InvokeFunction"
+  function_name = module.payment_session_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${module.whatsapp_api_gateway.execution_arn}/*/*"
+}
+
+# Redeploy API Gateway to include new routes
+resource "aws_api_gateway_deployment" "payment_routes" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.payments.id,
+      aws_api_gateway_resource.create_session.id,
+      aws_api_gateway_method.create_session_post.id,
+      aws_api_gateway_integration.create_session_lambda.id,
+    ]))
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  depends_on = [
+    aws_api_gateway_method.create_session_post,
+    aws_api_gateway_method.create_session_options,
+    aws_api_gateway_integration.create_session_lambda,
+    aws_api_gateway_integration.create_session_options,
+    aws_api_gateway_integration_response.create_session_options,
   ]
 }
