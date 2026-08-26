@@ -73,11 +73,21 @@ def get_flutterwave_credentials() -> dict:
     return _flutterwave_credentials
 
 
-def generate_tx_ref() -> str:
-    """Generate unique transaction reference."""
+def generate_tx_ref(phone_number: str, tier: str, weeks: int) -> str:
+    """
+    Generate unique transaction reference with embedded payment data.
+
+    Format: VALO_{phone_safe}_{tier}_{weeks}_{timestamp}_{random}
+    Phone is encoded: + -> P, so +2348012345678 becomes P2348012345678
+
+    This allows us to extract payment data from the webhook since
+    Flutterwave doesn't return the meta object in webhooks.
+    """
     timestamp = int(time.time() * 1000)
     random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=7))
-    return f"VALO_{timestamp}_{random_suffix}"
+    # Encode phone: replace + with P to keep it URL-safe
+    phone_safe = phone_number.replace('+', 'P')
+    return f"VALO_{phone_safe}_{tier}_{weeks}_{timestamp}_{random_suffix}"
 
 
 def create_flutterwave_session(
@@ -117,7 +127,7 @@ def create_flutterwave_session(
     total_cents = tier_data['price_cents'] * weeks
     amount_usd = total_cents / 100
 
-    tx_ref = generate_tx_ref()
+    tx_ref = generate_tx_ref(phone_number, tier, weeks)
 
     # Build request payload
     payload = {

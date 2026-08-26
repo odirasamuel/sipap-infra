@@ -212,6 +212,42 @@ def extract_paystack_payment_data(event: dict) -> PaymentData | None:
         return None
 
 
+def parse_tx_ref(tx_ref: str) -> dict | None:
+    """
+    Parse payment data from tx_ref.
+
+    Format: VALO_{phone_safe}_{tier}_{weeks}_{timestamp}_{random}
+    Example: VALO_P2348012345678_basic_1_1787760291660_u2foxx1
+
+    Returns dict with phone_number, tier, weeks or None if parsing fails.
+    """
+    try:
+        if not tx_ref or not tx_ref.startswith('VALO_'):
+            return None
+
+        parts = tx_ref.split('_')
+        if len(parts) < 5:
+            # Old format: VALO_{timestamp}_{random} - can't extract data
+            return None
+
+        # New format: VALO_{phone_safe}_{tier}_{weeks}_{timestamp}_{random}
+        phone_safe = parts[1]
+        tier = parts[2]
+        weeks = int(parts[3])
+
+        # Decode phone: P -> +
+        phone_number = phone_safe.replace('P', '+')
+
+        return {
+            'phone_number': phone_number,
+            'tier': tier,
+            'weeks': weeks,
+        }
+    except (ValueError, IndexError) as e:
+        logger.warning(f"Failed to parse tx_ref '{tx_ref}': {e}")
+        return None
+
+
 def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
     """
     Extract payment data from Flutterwave webhook event.
@@ -221,13 +257,12 @@ def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
     1. CARD_TRANSACTION (test mode / some live transactions):
     {
         "id": 12345678,
-        "txRef": "VALO_1234567890_abc123",  # camelCase
+        "txRef": "VALO_P2348012345678_basic_1_1787760291660_abc123",
         "flwRef": "FLW-MOCK-xxxxx",
         "amount": 2,
         "currency": "USD",
         "status": "successful",
-        "customer": {"email": "...", "phone_number": "..."},
-        "meta": {"phone_number": "...", "tier": "basic", "weeks": "1"},
+        "customer": {"email": "..."},
         "event.type": "CARD_TRANSACTION"
     }
 
@@ -235,44 +270,48 @@ def extract_flutterwave_payment_data(event: dict) -> PaymentData | None:
     {
         "event": "charge.completed",
         "data": {
-            "tx_ref": "VALO_...",  # snake_case
+            "tx_ref": "VALO_P2348012345678_basic_1_...",
             "flw_ref": "FLW-...",
             ...
         }
     }
+
+    Payment data (phone, tier, weeks) is embedded in tx_ref since
+    Flutterwave doesn't return the meta object in webhooks.
     """
     try:
         # Detect payload structure: root-level (CARD_TRANSACTION) or nested (charge.completed)
-        # Root-level has 'txRef' or 'event.type', nested has 'data' object
         if 'txRef' in event or 'event.type' in event:
             # Root-level structure (CARD_TRANSACTION)
             data = event
-            meta = data.get('meta', {})
             customer = data.get('customer', {})
-
-            # txRef is camelCase in this format
             reference = data.get('txRef', '') or data.get('flwRef', '')
         else:
             # Nested structure (charge.completed)
             data = event.get('data', {})
-            meta = data.get('meta', {})
             customer = data.get('customer', {})
-
-            # tx_ref is snake_case in this format
             reference = data.get('tx_ref', '') or data.get('flw_ref', '')
 
-        # Extract phone number from meta or customer
-        phone_number = meta.get('phone_number', '') or customer.get('phone_number', '')
+        # Extract payment data from tx_ref (primary method)
+        tx_data = parse_tx_ref(reference)
 
-        # Handle weeks as string or int
-        weeks_raw = meta.get('weeks', '1')
-        weeks = int(weeks_raw) if isinstance(weeks_raw, str) else weeks_raw
+        if tx_data:
+            phone_number = tx_data['phone_number']
+            tier = tx_data['tier']
+            weeks = tx_data['weeks']
+        else:
+            # Fallback: try meta object (may not be present in webhooks)
+            meta = data.get('meta', {})
+            phone_number = meta.get('phone_number', '') or customer.get('phone_number', '')
+            tier = meta.get('tier', 'basic')
+            weeks_raw = meta.get('weeks', '1')
+            weeks = int(weeks_raw) if isinstance(weeks_raw, str) else weeks_raw
 
-        logger.info(f"Flutterwave payment extracted: phone={phone_number}, tier={meta.get('tier', 'basic')}, ref={reference}")
+        logger.info(f"Flutterwave payment extracted: phone={phone_number}, tier={tier}, weeks={weeks}, ref={reference}")
 
         return {
             'phone_number': phone_number,
-            'tier': meta.get('tier', 'basic'),
+            'tier': tier,
             'weeks': weeks,
             'provider': 'flutterwave',
             'amount_usd': data.get('amount', 0),
