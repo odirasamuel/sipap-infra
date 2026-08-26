@@ -1024,6 +1024,47 @@ resource "aws_lambda_permission" "payment_session_api_gateway" {
   source_arn    = "${module.whatsapp_api_gateway.execution_arn}/*/*"
 }
 
+# ==============================================================================
+# PAYMENT WEBHOOK ROUTE - /payments/webhook (for Flutterwave webhooks)
+# ==============================================================================
+
+# /payments/webhook resource
+resource "aws_api_gateway_resource" "payment_webhook" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  parent_id   = aws_api_gateway_resource.payments.id
+  path_part   = "webhook"
+}
+
+# POST /payments/webhook method
+resource "aws_api_gateway_method" "payment_webhook_post" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.payment_webhook.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+# POST Lambda proxy integration for payment webhook
+resource "aws_api_gateway_integration" "payment_webhook_lambda" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.payment_webhook.id
+  http_method = aws_api_gateway_method.payment_webhook_post.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = module.payment_webhook_lambda.invoke_arn
+
+  timeout_milliseconds = 29000
+}
+
+# Lambda permission for API Gateway to invoke payment webhook handler
+resource "aws_lambda_permission" "payment_webhook_api_gateway" {
+  statement_id  = "AllowAPIGatewayInvoke-PaymentWebhook"
+  action        = "lambda:InvokeFunction"
+  function_name = module.payment_webhook_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${module.whatsapp_api_gateway.execution_arn}/*/*"
+}
+
 # Redeploy API Gateway to include new payment routes
 # This deployment updates the prod stage with the new routes
 resource "aws_api_gateway_deployment" "payment_routes" {
@@ -1044,6 +1085,10 @@ resource "aws_api_gateway_deployment" "payment_routes" {
       aws_api_gateway_integration.create_session_lambda.id,
       aws_api_gateway_method.create_session_options.id,
       aws_api_gateway_integration.create_session_options.id,
+      # Payment webhook route
+      aws_api_gateway_resource.payment_webhook.id,
+      aws_api_gateway_method.payment_webhook_post.id,
+      aws_api_gateway_integration.payment_webhook_lambda.id,
     ]))
   }
 
@@ -1057,5 +1102,8 @@ resource "aws_api_gateway_deployment" "payment_routes" {
     aws_api_gateway_integration.create_session_lambda,
     aws_api_gateway_integration.create_session_options,
     aws_api_gateway_integration_response.create_session_options,
+    # Payment webhook dependencies
+    aws_api_gateway_method.payment_webhook_post,
+    aws_api_gateway_integration.payment_webhook_lambda,
   ]
 }

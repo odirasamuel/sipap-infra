@@ -635,8 +635,14 @@ def handler(event: dict, context) -> dict:
 
             webhook_event = json.loads(body)
 
-            if webhook_event.get('event') != 'charge.completed':
-                logger.info(f"Ignoring Flutterwave event: {webhook_event.get('event')}")
+            # Debug: Log the raw webhook structure
+            logger.info(f"Flutterwave webhook payload keys: {list(webhook_event.keys())}")
+            logger.info(f"Flutterwave event type: {webhook_event.get('event')} | event.type: {webhook_event.get('event.type')}")
+
+            # Flutterwave uses 'event' field for event type
+            event_type = webhook_event.get('event') or webhook_event.get('event.type')
+            if event_type != 'charge.completed':
+                logger.info(f"Ignoring Flutterwave event: {event_type}")
                 return {
                     'statusCode': 200,
                     'body': json.dumps({'received': True}),
