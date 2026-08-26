@@ -9,6 +9,8 @@ on:
       - 'lambda-functions/payment-webhook-handler/**'
       - 'lambda-functions/notification-retry-handler/**'
       - 'lambda-functions/payment-session-handler/**'
+      - 'lambda-functions/subscription-reminder-handler/**'
+      - 'lambda-functions/token-validator-handler/**'
       - '.github/workflows/build-auth-lambda-packages.yml'
   workflow_dispatch:
     inputs:
@@ -369,9 +371,177 @@ jobs:
           echo "Key: ${KEY}"
           echo "Git SHA: ${{ github.sha }}"
 
+  build-subscription-reminder:
+    name: Build Subscription Reminder Handler
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SIPAP_DEV_AWS_ROLE_ARN }}
+          role-session-name: sipap-subscription-reminder-build
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Subscription Reminder Lambda package
+        run: |
+          echo "=============================================="
+          echo "Building Subscription Reminder Handler Lambda"
+          echo "Python: ${{ env.PYTHON_VERSION }}"
+          echo "=============================================="
+
+          PACKAGE_DIR="lambda_package"
+          SOURCE_DIR="lambda-functions/subscription-reminder-handler"
+
+          rm -rf "${PACKAGE_DIR}"
+          mkdir -p "${PACKAGE_DIR}"
+
+          # Install dependencies
+          echo "Installing dependencies..."
+          pip install \
+            psycopg2-binary>=2.9.9 \
+            boto3>=1.34.0 \
+            -t "${PACKAGE_DIR}/" \
+            --platform manylinux2014_x86_64 \
+            --only-binary=:all: \
+            --python-version ${{ env.PYTHON_VERSION }}
+
+          # Copy handler code
+          echo "Copying handler code..."
+          cp "${SOURCE_DIR}/handler.py" "${PACKAGE_DIR}/"
+
+          # Clean up unnecessary files
+          find "${PACKAGE_DIR}" -type d -name "__pycache__" -exec rm -rf {} + || true
+          find "${PACKAGE_DIR}" -type f -name "*.pyc" -delete || true
+          find "${PACKAGE_DIR}" -type d -name "*.dist-info" -exec rm -rf {} + || true
+
+          # Create zip
+          echo "Creating deployment package..."
+          (cd "${PACKAGE_DIR}" && zip -X -r ../subscription_reminder_handler.zip .)
+
+          echo "Package created:"
+          ls -lh subscription_reminder_handler.zip
+
+      - name: Upload Subscription Reminder package to S3
+        run: |
+          set -euo pipefail
+
+          PY_FOLDER="python_${{ env.PYTHON_VERSION }}"
+          KEY="auth-handlers/${PY_FOLDER}/subscription_reminder_handler.zip"
+          ZIP_FILE="subscription_reminder_handler.zip"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          echo "Uploading to s3://${S3_BUCKET}/${KEY}"
+
+          aws s3 cp \
+            "${ZIP_FILE}" \
+            "s3://${S3_BUCKET}/${KEY}" \
+            --metadata "git-sha=${{ github.sha }},git-branch=${{ github.ref_name }},python-version=${{ env.PYTHON_VERSION }},package-type=lambda-function,build-date=${BUILD_DATE},handler=subscription-reminder"
+
+          echo "✅ Upload successful!"
+          echo "Bucket: ${S3_BUCKET}"
+          echo "Key: ${KEY}"
+          echo "Git SHA: ${{ github.sha }}"
+
+  build-token-validator:
+    name: Build Token Validator Handler
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SIPAP_DEV_AWS_ROLE_ARN }}
+          role-session-name: sipap-token-validator-build
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build Token Validator Lambda package
+        run: |
+          echo "=============================================="
+          echo "Building Token Validator Handler Lambda"
+          echo "Python: ${{ env.PYTHON_VERSION }}"
+          echo "=============================================="
+
+          PACKAGE_DIR="lambda_package"
+          SOURCE_DIR="lambda-functions/token-validator-handler"
+
+          rm -rf "${PACKAGE_DIR}"
+          mkdir -p "${PACKAGE_DIR}"
+
+          # Install dependencies
+          echo "Installing dependencies..."
+          pip install \
+            psycopg2-binary>=2.9.9 \
+            boto3>=1.34.0 \
+            -t "${PACKAGE_DIR}/" \
+            --platform manylinux2014_x86_64 \
+            --only-binary=:all: \
+            --python-version ${{ env.PYTHON_VERSION }}
+
+          # Copy handler code
+          echo "Copying handler code..."
+          cp "${SOURCE_DIR}/handler.py" "${PACKAGE_DIR}/"
+
+          # Clean up unnecessary files
+          find "${PACKAGE_DIR}" -type d -name "__pycache__" -exec rm -rf {} + || true
+          find "${PACKAGE_DIR}" -type f -name "*.pyc" -delete || true
+          find "${PACKAGE_DIR}" -type d -name "*.dist-info" -exec rm -rf {} + || true
+
+          # Create zip
+          echo "Creating deployment package..."
+          (cd "${PACKAGE_DIR}" && zip -X -r ../token_validator_handler.zip .)
+
+          echo "Package created:"
+          ls -lh token_validator_handler.zip
+
+      - name: Upload Token Validator package to S3
+        run: |
+          set -euo pipefail
+
+          PY_FOLDER="python_${{ env.PYTHON_VERSION }}"
+          KEY="auth-handlers/${PY_FOLDER}/token_validator_handler.zip"
+          ZIP_FILE="token_validator_handler.zip"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          echo "Uploading to s3://${S3_BUCKET}/${KEY}"
+
+          aws s3 cp \
+            "${ZIP_FILE}" \
+            "s3://${S3_BUCKET}/${KEY}" \
+            --metadata "git-sha=${{ github.sha }},git-branch=${{ github.ref_name }},python-version=${{ env.PYTHON_VERSION }},package-type=lambda-function,build-date=${BUILD_DATE},handler=token-validator"
+
+          echo "✅ Upload successful!"
+          echo "Bucket: ${S3_BUCKET}"
+          echo "Key: ${KEY}"
+          echo "Git SHA: ${{ github.sha }}"
+
   summary:
     name: Build Summary
-    needs: [build-whatsapp-auth, build-payment-webhook, build-notification-retry, build-payment-session]
+    needs: [build-whatsapp-auth, build-payment-webhook, build-notification-retry, build-payment-session, build-subscription-reminder, build-token-validator]
     runs-on: ubuntu-latest
     if: always()
 
@@ -386,12 +556,16 @@ jobs:
           echo "| Payment Webhook Handler | ${{ needs.build-payment-webhook.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Notification Retry Handler | ${{ needs.build-notification-retry.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Payment Session Handler | ${{ needs.build-payment-session.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Subscription Reminder Handler | ${{ needs.build-subscription-reminder.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Token Validator Handler | ${{ needs.build-token-validator.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**S3 Paths:**" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/whatsapp_auth_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/payment_webhook_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/notification_retry_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/payment_session_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/subscription_reminder_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`s3://sipap-lambda-packages-dev/auth-handlers/python_${{ env.PYTHON_VERSION }}/token_validator_handler.zip\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Git SHA:** \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "**Branch:** \`${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
