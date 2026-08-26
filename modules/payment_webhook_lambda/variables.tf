@@ -51,6 +51,12 @@ variable "s3_object_version" {
   default     = null
 }
 
+variable "s3_source_code_hash" {
+  description = "Base64-encoded hash of the S3 package (triggers redeployment on change)"
+  type        = string
+  default     = null
+}
+
 # ==============================================================================
 # Lambda Runtime Configuration
 # ==============================================================================

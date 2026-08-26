@@ -41,7 +41,7 @@ resource "aws_lambda_function" "payment_webhook" {
 
   # Conditional deployment source - use S3 or local archive
   filename         = var.use_s3_deployment ? null : data.archive_file.function_code[0].output_path
-  source_code_hash = var.use_s3_deployment ? null : data.archive_file.function_code[0].output_base64sha256
+  source_code_hash = var.use_s3_deployment ? var.s3_source_code_hash : data.archive_file.function_code[0].output_base64sha256
 
   s3_bucket         = var.use_s3_deployment ? var.s3_bucket : null
   s3_key            = var.use_s3_deployment ? var.s3_key : null

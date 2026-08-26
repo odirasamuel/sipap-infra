@@ -850,10 +850,11 @@ module "payment_webhook_lambda" {
   env           = var.env
 
   # S3-based deployment configuration
-  use_s3_deployment = true
-  s3_bucket         = local.lambda_packages_bucket
-  s3_key            = "auth-handlers/python_3.13/payment_webhook_handler.zip"
-  s3_object_version = data.aws_s3_object.payment_webhook_function.version_id
+  use_s3_deployment    = true
+  s3_bucket            = local.lambda_packages_bucket
+  s3_key               = "auth-handlers/python_3.13/payment_webhook_handler.zip"
+  s3_object_version    = data.aws_s3_object.payment_webhook_function.version_id
+  s3_source_code_hash  = data.aws_s3_object.payment_webhook_function.etag
 
   # VPC Configuration (Aurora access)
   private_subnet_ids = local.private_subnet_ids
@@ -904,8 +905,9 @@ module "payment_session_lambda" {
   env           = var.env
 
   # S3-based deployment configuration
-  s3_bucket = local.lambda_packages_bucket
-  s3_key    = "auth-handlers/python_3.13/payment_session_handler.zip"
+  s3_bucket        = local.lambda_packages_bucket
+  s3_key           = "auth-handlers/python_3.13/payment_session_handler.zip"
+  source_code_hash = data.aws_s3_object.payment_session_function.etag
 
   # Flutterwave credentials
   flutterwave_secret_arn = var.flutterwave_secret_arn
