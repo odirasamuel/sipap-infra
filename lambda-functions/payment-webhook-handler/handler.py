@@ -418,13 +418,96 @@ def calculate_grace_period(expires_at: datetime) -> datetime:
 
 
 # =============================================================================
-# Subscription Update
+# User Creation and Subscription Update
 # =============================================================================
+
+
+def create_user_from_payment(
+    cursor,
+    phone_number: str,
+    tier: str,
+    customer_email: str | None = None
+) -> dict | None:
+    """
+    Create a new user record from payment data.
+
+    Called when payment succeeds but user doesn't exist yet.
+    This handles the case where a new user completes payment
+    before their record is created (direct payment without WhatsApp).
+
+    Args:
+        cursor: Database cursor
+        phone_number: User's phone number in E.164 format
+        tier: Subscription tier (basic, pro)
+        customer_email: Customer email from payment provider
+
+    Returns:
+        Dict with user id and name, or None if creation fails
+    """
+    try:
+        cursor.execute(
+            """
+            INSERT INTO users (
+                phone_number,
+                email,
+                subscription_status,
+                subscription_tier,
+                is_active,
+                created_at,
+                updated_at
+            ) VALUES (%s, %s, 'pending', %s, true, NOW(), NOW())
+            ON CONFLICT (phone_number) DO NOTHING
+            RETURNING id, name
+            """,
+            (phone_number, customer_email, tier)
+        )
+
+        result = cursor.fetchone()
+        if result:
+            logger.info(f"Created new user from payment: {phone_number}")
+            return {'id': result['id'], 'name': result['name']}
+
+        # User may have been created by concurrent request, try to fetch
+        cursor.execute(
+            "SELECT id, name FROM users WHERE phone_number = %s",
+            (phone_number,)
+        )
+        return cursor.fetchone()
+
+    except Exception as e:
+        logger.error(f"Failed to create user from payment: {e}")
+        return None
+
+
+def mark_registration_token_used(cursor, phone_number: str) -> None:
+    """
+    Mark registration token as used after successful payment.
+
+    Args:
+        cursor: Database cursor
+        phone_number: User's phone number
+    """
+    try:
+        cursor.execute(
+            """
+            UPDATE user_registration_tokens
+            SET used_at = NOW()
+            WHERE phone_number = %s AND used_at IS NULL
+            """,
+            (phone_number,)
+        )
+    except Exception as e:
+        # Non-critical, just log
+        logger.warning(f"Failed to mark registration token as used: {e}")
 
 
 def update_subscription(payment_data: PaymentData) -> bool:
     """
     Update user subscription in the database with grace period.
+
+    AUTO-CREATES USER IF NOT EXISTS: If payment succeeds but user
+    doesn't exist yet, creates the user record automatically.
+    This handles new users who complete payment directly.
 
     Args:
         payment_data: Extracted payment information
@@ -456,9 +539,39 @@ def update_subscription(payment_data: PaymentData) -> bool:
             )
 
             user = cursor.fetchone()
+
+            # AUTO-CREATE USER IF NOT EXISTS
             if not user:
-                logger.error(f"User not found: {payment_data['phone_number']}")
-                return False
+                logger.info(f"User not found, creating from payment: {payment_data['phone_number']}")
+                user = create_user_from_payment(
+                    cursor,
+                    payment_data['phone_number'],
+                    payment_data['tier'],
+                    payment_data['customer_email']
+                )
+
+                if not user:
+                    logger.error(f"Failed to create user: {payment_data['phone_number']}")
+                    return False
+
+                # Update the newly created user's subscription
+                cursor.execute(
+                    """
+                    UPDATE users SET
+                        subscription_status = 'active',
+                        subscription_tier = %s,
+                        subscription_expires_at = %s,
+                        subscription_grace_until = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id, name
+                    """,
+                    (payment_data['tier'], expires_at, grace_until, user['id'])
+                )
+                user = cursor.fetchone()
+
+            # Mark registration token as used (if exists)
+            mark_registration_token_used(cursor, payment_data['phone_number'])
 
             # Record subscription event with all columns
             stripe_ref = payment_data['reference'] if payment_data['provider'] == 'stripe' else None
