@@ -86,11 +86,24 @@ def get_db_connection():
     )
 
 
+def normalize_phone_number(phone: str) -> str:
+    """
+    Normalize phone number by stripping whatsapp: prefix.
+
+    Twilio sends: whatsapp:+2348012345678
+    Database stores: +2348012345678
+    """
+    if phone.startswith('whatsapp:'):
+        return phone[9:]  # Remove 'whatsapp:' prefix
+    return phone
+
+
 def parse_twilio_payload(body: str) -> TwilioPayload:
     """Parse Twilio webhook form-urlencoded payload."""
     params = parse_qs(body)
+    raw_from = params.get('From', [''])[0]
     return {
-        'from_number': params.get('From', [''])[0],
+        'from_number': normalize_phone_number(raw_from),
         'body': params.get('Body', [''])[0],
         'message_sid': params.get('MessageSid', [''])[0],
         'account_sid': params.get('AccountSid', [''])[0],
