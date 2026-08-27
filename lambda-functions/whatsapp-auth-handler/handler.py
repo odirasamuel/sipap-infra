@@ -399,13 +399,19 @@ def handler(event: dict, context) -> dict:
             signup_url = f"{BASE_URL}/signup?token={token}&phone={phone_number}"
 
             logger.info(f"New user {phone_number} - sending signup link")
+
+            # Send message via Twilio API (same as orchestrator)
+            send_whatsapp_message(
+                phone_number,
+                f"Welcome to Valo! To get started with AI-powered sports predictions, "
+                f"please register here: {signup_url}"
+            )
+
+            # Return empty TwiML - message already sent via API
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'text/xml'},
-                'body': generate_twiml_response(
-                    f"Welcome to Valo! To get started with AI-powered sports predictions, "
-                    f"please register here: {signup_url}"
-                ),
+                'body': generate_empty_twiml(),
             }
 
         name = user_status['name'] or 'there'
@@ -418,13 +424,19 @@ def handler(event: dict, context) -> dict:
             renew_url = f"{BASE_URL}/renew?phone={phone_number}"
 
             logger.info(f"Expired subscription (past grace) for {phone_number}")
+
+            # Send message via Twilio API (same as orchestrator)
+            send_whatsapp_message(
+                phone_number,
+                f"Hi {name}! Your Valo subscription has expired. "
+                f"Renew now to continue receiving AI sports predictions: {renew_url}"
+            )
+
+            # Return empty TwiML - message already sent via API
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'text/xml'},
-                'body': generate_twiml_response(
-                    f"Hi {name}! Your Valo subscription has expired. "
-                    f"Renew now to continue receiving AI sports predictions: {renew_url}"
-                ),
+                'body': generate_empty_twiml(),
             }
 
         # =================================================================
@@ -454,13 +466,19 @@ def handler(event: dict, context) -> dict:
             subscribe_url = f"{BASE_URL}/subscribe?phone={phone_number}"
 
             logger.info(f"Inactive subscription for {phone_number}")
+
+            # Send message via Twilio API (same as orchestrator)
+            send_whatsapp_message(
+                phone_number,
+                f"Hi {name}! You need an active subscription to use Valo. "
+                f"Subscribe here: {subscribe_url}"
+            )
+
+            # Return empty TwiML - message already sent via API
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'text/xml'},
-                'body': generate_twiml_response(
-                    f"Hi {name}! You need an active subscription to use Valo. "
-                    f"Subscribe here: {subscribe_url}"
-                ),
+                'body': generate_empty_twiml(),
             }
 
         # =================================================================

@@ -30,6 +30,9 @@ twilio_secret_arn          = "arn:aws:secretsmanager:us-east-1:810278669998:secr
 flutterwave_secret_arn     = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/flutterwave-credentials-KGYrZJ"
 flutterwave_webhook_secret = "valo_flw_live_7x9Kp2mN4wQrS8tY"
 
+# WhatsApp Auth Configuration
+enable_whatsapp_auth = true  # Routes messages through auth handler before SQS
+
 # Database and cache endpoints (from parent terraform output)
 redis_endpoint           = "sipap-dev-redis.qnk6bl.0001.use1.cache.amazonaws.com"
 postgres_host            = "sipap-dev-rds.c2hooq6iskvw.us-east-1.rds.amazonaws.com"

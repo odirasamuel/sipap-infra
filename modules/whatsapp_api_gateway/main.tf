@@ -229,11 +229,8 @@ resource "aws_api_gateway_stage" "prod" {
     var.additional_tags
   )
 
-  # Allow external deployments (like payment routes in core_deploy) to update
-  # this stage without Terraform trying to revert to the module's deployment
-  lifecycle {
-    ignore_changes = [deployment_id]
-  }
+  # NOTE: ignore_changes removed to allow Terraform to update deployment_id
+  # when switching between SQS and Lambda integrations
 }
 
 # ==============================================================================
