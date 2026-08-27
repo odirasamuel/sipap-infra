@@ -1209,6 +1209,139 @@ module "token_validator_lambda" {
 }
 
 # ==============================================================================
+# ACCOUNT HANDLER LAMBDA - User account lookup and subscription info
+# ==============================================================================
+
+# S3 object reference for account handler Lambda package
+data "aws_s3_object" "account_handler_function" {
+  bucket = local.lambda_packages_bucket
+  key    = "auth-handlers/python_3.13/account_handler.zip"
+}
+
+module "account_handler_lambda" {
+  source = "../modules/account_handler_lambda"
+
+  function_name = "${var.stack_name}-${var.env}-account-handler"
+  env           = var.env
+
+  # S3-based deployment configuration
+  use_s3_deployment    = true
+  s3_bucket            = local.lambda_packages_bucket
+  s3_key               = "auth-handlers/python_3.13/account_handler.zip"
+  s3_source_code_hash  = data.aws_s3_object.account_handler_function.etag
+
+  # VPC Configuration (Aurora access)
+  private_subnet_ids = local.private_subnet_ids
+  security_group_ids = [module.lambda_internal_security_group.security_group_id]
+
+  # Database credentials
+  postgres_secret_arn = local.postgres_credentials_arn
+
+  # API Gateway permission
+  enable_api_gateway_permission = true
+  api_gateway_execution_arn     = module.whatsapp_api_gateway.execution_arn
+
+  # Runtime configuration
+  lambda_runtime     = "python3.13"
+  lambda_timeout     = 30
+  lambda_memory_size = 256
+
+  additional_tags = merge(var.additional_tags, {
+    Service     = "account-handler"
+    PackageETag = data.aws_s3_object.account_handler_function.etag
+  })
+
+  depends_on = [
+    module.lambda_internal_security_group
+  ]
+}
+
+# ==============================================================================
+# ACCOUNT API GATEWAY RESOURCES - /account
+# ==============================================================================
+
+# /account resource
+resource "aws_api_gateway_resource" "account" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  parent_id   = module.whatsapp_api_gateway.root_resource_id
+  path_part   = "account"
+}
+
+# OPTIONS method for CORS preflight - /account
+resource "aws_api_gateway_method" "account_options" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.account.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "account_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.account.id
+  http_method = aws_api_gateway_method.account_options.http_method
+  type        = "MOCK"
+
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "account_options_200" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.account.id
+  http_method = aws_api_gateway_method.account_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "account_options" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.account.id
+  http_method = aws_api_gateway_method.account_options.http_method
+  status_code = aws_api_gateway_method_response.account_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
+# GET /account method
+resource "aws_api_gateway_method" "account_get" {
+  rest_api_id   = module.whatsapp_api_gateway.rest_api_id
+  resource_id   = aws_api_gateway_resource.account.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "account_lambda" {
+  rest_api_id = module.whatsapp_api_gateway.rest_api_id
+  resource_id = aws_api_gateway_resource.account.id
+  http_method = aws_api_gateway_method.account_get.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = module.account_handler_lambda.invoke_arn
+
+  timeout_milliseconds = 29000
+}
+
+# Lambda permission for API Gateway to invoke account handler
+resource "aws_lambda_permission" "account_handler_api_gateway" {
+  statement_id  = "AllowAPIGatewayInvoke-AccountHandler"
+  action        = "lambda:InvokeFunction"
+  function_name = module.account_handler_lambda.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${module.whatsapp_api_gateway.execution_arn}/*/*"
+}
+
+# ==============================================================================
 # AUTH API GATEWAY RESOURCES - /auth/validate-token and /auth/user-status
 # ==============================================================================
 
@@ -1377,7 +1510,7 @@ resource "aws_api_gateway_deployment" "auth_routes" {
   rest_api_id = module.whatsapp_api_gateway.rest_api_id
 
   stage_name  = "prod"
-  description = "Deployment with auth routes"
+  description = "Deployment with auth and account routes"
 
   triggers = {
     redeployment = sha1(jsonencode([
@@ -1393,6 +1526,12 @@ resource "aws_api_gateway_deployment" "auth_routes" {
       aws_api_gateway_method.user_status_options.id,
       aws_api_gateway_integration.user_status_lambda.id,
       aws_api_gateway_integration.user_status_options.id,
+      # Account routes
+      aws_api_gateway_resource.account.id,
+      aws_api_gateway_method.account_get.id,
+      aws_api_gateway_method.account_options.id,
+      aws_api_gateway_integration.account_lambda.id,
+      aws_api_gateway_integration.account_options.id,
     ]))
   }
 
@@ -1412,5 +1551,11 @@ resource "aws_api_gateway_deployment" "auth_routes" {
     aws_api_gateway_integration.user_status_lambda,
     aws_api_gateway_integration.user_status_options,
     aws_api_gateway_integration_response.user_status_options,
+    # Account handler
+    aws_api_gateway_method.account_get,
+    aws_api_gateway_method.account_options,
+    aws_api_gateway_integration.account_lambda,
+    aws_api_gateway_integration.account_options,
+    aws_api_gateway_integration_response.account_options,
   ]
 }
