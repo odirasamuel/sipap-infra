@@ -399,6 +399,10 @@ module "ecs_cluster" {
           {
             name       = "API_FOOTBALL_KEY"
             value_from = "${module.api_keys_secret.secret_arn}:API_FOOTBALL_KEY::"
+          },
+          {
+            name       = "EXCHANGE_RATE_API_KEY"
+            value_from = "${module.api_keys_secret.secret_arn}:EXCHANGE_RATE_API_KEY::"
           }
         ]
       )
@@ -549,9 +553,10 @@ module "api_keys_secret" {
 
   # Empty secret - will be populated manually via AWS CLI with profile "odiraaws"
   secret_string = jsonencode({
-    API_FOOTBALL_KEY     = ""
-    OPENWEATHER_API_KEY  = ""
-    NEWS_API_KEY         = ""
+    API_FOOTBALL_KEY      = ""
+    OPENWEATHER_API_KEY   = ""
+    NEWS_API_KEY          = ""
+    EXCHANGE_RATE_API_KEY = ""
   })
 
   additional_tags = merge(
