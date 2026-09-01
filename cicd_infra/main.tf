@@ -106,11 +106,10 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      # Wildcard pattern supports all sipap-* repos in the org
+      # Wildcard pattern supports all sipap-* and ridhatech-* repos in the org
       values = [
         "repo:${var.github_org}/sipap*",
-        "repo:${var.github_org}/ridhatech-website*"
-        # "repo:${var.github_org}/sre-sipap*"
+        "repo:${var.github_org}/ridhatech*"
       ]
     }
   }
