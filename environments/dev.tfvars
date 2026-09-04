@@ -39,6 +39,13 @@ postgres_host            = "sipap-dev-rds.c2hooq6iskvw.us-east-1.rds.amazonaws.c
 postgres_db              = "sipap_dev"
 postgres_credentials_arn = "arn:aws:secretsmanager:us-east-1:810278669998:secret:sipap/dev/aurora-credentials-j0j6ay"
 
+# External Lambda security groups that need RDS access.
+# These are NOT managed by this Terraform — they're created externally (e.g. Amplify/ridhatech-admin).
+# Add the SG ID here so Terraform manages the ingress rule and doesn't drop it on plan/apply.
+admin_lambda_security_group_ids = [
+  "sg-01a1fca2719ec36c6",  # ridhatech-admin DB proxy Lambda
+]
+
 # Additional Tags
 additional_tags = {
   CostCenter = "Development"
@@ -67,11 +74,20 @@ ecs_services = [
       { name = "ENVIRONMENT", value = "dev" },
       { name = "SERVICE_NAME", value = "orchestrator-service" },
       { name = "LOG_LEVEL", value = "INFO" },
-      # Use cross-region inference profile for 2x daily token quota (10.8M vs 5.4M)
-      { name = "MODEL_ID", value = "us.anthropic.claude-sonnet-4-5-20250929-v1:0" },
+      # Cost optimization: Use direct regional model instead of cross-region inference profile.
+      # Cross-region profile (us.*) disabled tool caching (Bedrock rejects cache_tools="auto" on profiles).
+      # Direct regional model re-enables tool definition caching (~14K tokens saved per agent call).
+      # Token quota: 5.4M/min (regional) vs 10.8M/min (cross-region) — adequate for current test load.
+      # Re-evaluate when scaling to many concurrent users.
+      { name = "MODEL_ID", value = "anthropic.claude-sonnet-4-5-20250929-v1:0" },
+      # NLU/clarification/suggestions use Haiku 3.5 (73% cheaper than Sonnet, same quality for
+      # intent parsing). Prediction agents continue to use MODEL_ID (Sonnet 4.5).
+      { name = "NLU_MODEL_ID", value = "anthropic.claude-haiku-3-5-20241022-v1:0" },
       { name = "REDIS_SSL", value = "true" },
       { name = "ENABLE_WHATSAPP_DELIVERY", value = "true" },
-      # Temporarily disable news agent to reduce token usage (news agent uses web_fetch which consumes many tokens)
+      # News Agent disabled — web content fetching generates 20-25M uncacheable tokens/month.
+      # Re-enable by setting to "statistical,form,news" once content truncation is implemented.
+      # Ensemble auto-adjusts weights: statistical=40%, form=60% when news is absent.
       { name = "ENABLED_AGENTS", value = "statistical,form" },
       { name = "TWILIO_SECRET_ARN", value = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/twilio-credentials-tngBnx" },
       # These will be interpolated in main.tf from remote state/outputs:
@@ -82,7 +98,7 @@ ecs_services = [
     secrets = [
       # Aurora credentials from Secrets Manager
       # Format: { name = "ENV_VAR_NAME", value_from = "arn:aws:secretsmanager:..." }
-      # NOTE: TWILIO_SECRET_ARN is in environment_variables (it's the ARN itself, not fetched from Secrets Manager)
+      # NOTE: TWILIO_SECRET_ARN is injected by main.tf concat block (it's the ARN itself, not fetched from Secrets Manager)
     ]
 
     health_check = {

@@ -207,7 +207,27 @@ resource "aws_ecs_service" "app" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.app[each.key].arn
   desired_count   = each.value.desired_count
-  launch_type     = "FARGATE"
+
+  # Use capacity_provider_strategy instead of launch_type so we can
+  # optionally enable FARGATE_SPOT per-service (for batch/retry-safe tasks).
+  # Standard Fargate (use_spot = false): FARGATE base=1 weight=1
+  # Spot Fargate     (use_spot = true):  FARGATE_SPOT weight=100
+  dynamic "capacity_provider_strategy" {
+    for_each = each.value.use_spot ? [] : [1]
+    content {
+      capacity_provider = "FARGATE"
+      base              = 1
+      weight            = 1
+    }
+  }
+
+  dynamic "capacity_provider_strategy" {
+    for_each = each.value.use_spot ? [1] : []
+    content {
+      capacity_provider = "FARGATE_SPOT"
+      weight            = 100
+    }
+  }
 
   platform_version = var.platform_version
 

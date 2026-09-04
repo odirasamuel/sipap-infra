@@ -60,6 +60,19 @@ resource "aws_security_group" "main" {
     security_groups = var.lambda_security_group_ids
   }
 
+  # Allow external admin Lambda functions (e.g. ridhatech-admin DB proxy) to access RDS.
+  # Only created when admin_lambda_security_group_ids is non-empty.
+  dynamic "ingress" {
+    for_each = length(var.admin_lambda_security_group_ids) > 0 ? [1] : []
+    content {
+      description     = "Allow DB proxy Lambda to access Aurora"
+      from_port       = 5432
+      to_port         = 5432
+      protocol        = "tcp"
+      security_groups = var.admin_lambda_security_group_ids
+    }
+  }
+
   tags = merge(
     {
       Name = "${var.stack_name}-${var.env}-db-sg"

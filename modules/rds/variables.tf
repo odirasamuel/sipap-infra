@@ -51,6 +51,12 @@ variable "lambda_security_group_ids" {
   default     = []
 }
 
+variable "admin_lambda_security_group_ids" {
+  description = "Security group IDs of external admin Lambda functions (e.g. ridhatech-admin DB proxy). Added as a separate ingress rule to match existing AWS state."
+  type        = list(string)
+  default     = []
+}
+
 variable "use_serverless" {
   description = "Use Aurora Serverless v2 (true) or standard RDS instance (false)"
   type        = bool

@@ -92,6 +92,12 @@ variable "additional_tags" {
   default     = {}
 }
 
+variable "admin_lambda_security_group_ids" {
+  description = "Security group IDs of external Lambda functions (e.g. ridhatech-admin DB proxy) that need access to RDS. Not managed by this Terraform — reference by SG ID."
+  type        = list(string)
+  default     = []
+}
+
 # ECS Services Configuration
 variable "ecs_services" {
   description = "List of ECS services to deploy (e.g., orchestrator)"

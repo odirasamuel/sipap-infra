@@ -80,6 +80,19 @@ module "nat_gateway" {
   additional_tags    = var.additional_tags
 }
 
+# VPC Gateway Endpoints (FREE — no hourly charge)
+# Redirects S3 and DynamoDB traffic off the NAT Gateway to reduce data costs.
+module "vpc_endpoints" {
+  source = "./modules/vpc_endpoints"
+
+  stack_name              = var.stack_name
+  env                     = var.env
+  aws_region              = var.aws_region
+  vpc_id                  = module.vpc.vpc_id
+  private_route_table_ids = module.nat_gateway.private_route_table_ids
+  additional_tags         = var.additional_tags
+}
+
 # ============================================================================
 # SECURITY GROUPS
 # ============================================================================
@@ -236,7 +249,8 @@ module "aurora" {
   subnet_ids      = module.subnets.private_subnet_ids
   vpc_id          = module.vpc.vpc_id
   allowed_cidrs   = [var.vpc_cidr, "99.33.74.242/32"]  # VPC + local IP for integration testing
-  lambda_security_group_ids = [module.ecs_tasks_sg.security_group_id]  # Allow Lambda functions to access RDS
+  lambda_security_group_ids        = [module.ecs_tasks_sg.security_group_id]
+  admin_lambda_security_group_ids  = var.admin_lambda_security_group_ids
   additional_tags = var.additional_tags
 }
 
@@ -380,11 +394,8 @@ module "ecs_cluster" {
           {
             name  = "POSTGRES_DB"
             value = var.database_name
-          },
-          {
-            name  = "TWILIO_SECRET_ARN"
-            value = "arn:aws:secretsmanager:us-east-1:810278669998:secret:/sipap/dev/twilio-credentials-tngBnx"
           }
+          # TWILIO_SECRET_ARN comes from service.environment_variables in dev.tfvars
         ]
       )
 

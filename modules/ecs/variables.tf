@@ -110,6 +110,12 @@ variable "services" {
     enable_deployment_circuit_breaker = optional(bool, true)
     enable_deployment_rollback        = optional(bool, true)
     force_new_deployment              = optional(bool, false)
+
+    # Set to true to use FARGATE_SPOT capacity provider instead of standard FARGATE.
+    # Only appropriate for batch / retry-safe workloads (SQS-backed jobs, data scraping).
+    # NEVER use for always-on daemons (orchestrator) — 2-minute spot interruption drops
+    # in-flight WhatsApp responses.
+    use_spot = optional(bool, false)
   }))
 }
 
